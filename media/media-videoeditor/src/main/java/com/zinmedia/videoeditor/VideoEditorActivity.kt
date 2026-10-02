@@ -3,7 +3,6 @@ package com.zinmedia.videoeditor
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -32,22 +31,10 @@ class VideoEditorActivity : ComponentActivity() {
     @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val isDarkMode =
-            (resources.configuration.uiMode and
-                    Configuration.UI_MODE_NIGHT_MASK) ==
-                    Configuration.UI_MODE_NIGHT_YES
-
+        // Editor selalu bertema gelap: ikon status & navigation bar terang di atas latar hitam.
         enableEdgeToEdge(
-            navigationBarStyle = if (isDarkMode) {
-                SystemBarStyle.dark(
-                    scrim = Color.Transparent.toArgb()
-                )
-            } else {
-                SystemBarStyle.light(
-                    scrim = Color.Transparent.toArgb(),
-                    darkScrim = Color.Transparent.toArgb()
-                )
-            }
+            statusBarStyle = SystemBarStyle.dark(Color.Transparent.toArgb()),
+            navigationBarStyle = SystemBarStyle.dark(Color.Transparent.toArgb()),
         )
 
         // Ambil URI yang dikirim aplikasi utama
@@ -61,28 +48,24 @@ class VideoEditorActivity : ComponentActivity() {
         // setupBackPressHandler()
         val imageLoader = createCustomImageLoader(applicationContext)
         setContent {
-            CompositionLocalProvider(
-                LocalImageLoader provides imageLoader
-            ) { }
-            MarketplaceTheme {
-                //  Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                VideoEditorScreen(
-                    videoUri = inputUri,
-                    onExportFinished = { finalUri, keterangan ->
-                        val intent = Intent().apply {
-                            data = finalUri
-                            putExtra("keterangan", keterangan)
-                            putExtra("media_type", "video")
-                        }
-                        setResult(RESULT_OK, intent)
-                        finish()
-                    },
-                    onDismiss = {
-                        finish()
-                    },
-                    //     modifier = Modifier.padding(innerPadding)
-                    //    }
-                )
+            CompositionLocalProvider(LocalImageLoader provides imageLoader) {
+                MarketplaceTheme {
+                    VideoEditorScreen(
+                        videoUri = inputUri,
+                        recipientLabel = intent.getStringExtra(EXTRA_RECIPIENT_LABEL) ?: DEFAULT_RECIPIENT_LABEL,
+                        onExportFinished = { finalUri, keterangan ->
+                            val result = Intent().apply {
+                                data = finalUri
+                                putExtra("keterangan", keterangan)
+                                putExtra("media_type", "video")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            setResult(RESULT_OK, result)
+                            finish()
+                        },
+                        onDismiss = { finish() },
+                    )
+                }
             }
         }
     }
@@ -100,6 +83,10 @@ class VideoEditorActivity : ComponentActivity() {
     private fun handleSystemBack() {
         finish()
     }
+
+    companion object {
+        /** Label penerima di kiri tombol kirim, mis. "Status (Kontak)". Default: "Status". */
+        const val EXTRA_RECIPIENT_LABEL = "com.zinmedia.extra.RECIPIENT_LABEL"
+        private const val DEFAULT_RECIPIENT_LABEL = "Status"
+    }
 }
-
-

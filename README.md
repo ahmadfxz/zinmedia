@@ -108,6 +108,26 @@ editorLauncher.launch(
 
 Kalau pengguna menutup editor tanpa menyimpan, atau URI tidak diberikan / gambar gagal dimuat, `resultCode` bernilai `RESULT_CANCELED`.
 
+Label penerima di kiri tombol kirim (default `Status`) bisa diganti:
+
+```kotlin
+Intent(context, ImageEditorActivity::class.java).apply {
+    data = imageUri
+    putExtra(ImageEditorActivity.EXTRA_RECIPIENT_LABEL, "Status (Kontak)")
+}
+```
+
+`VideoEditorActivity.EXTRA_RECIPIENT_LABEL` berlaku sama untuk editor video.
+
+## Aplikasi contoh
+
+Modul `sample` (tidak ikut dipublish) membuka editor dengan foto/video contoh atau dari galeri:
+
+```bash
+./gradlew :sample:installDebug
+adb shell am start -n com.zinmedia.sample/.MainActivity --es open photo   # atau: video
+```
+
 ## Rilis versi baru
 
 1. Commit dan push perubahan ke `main`.

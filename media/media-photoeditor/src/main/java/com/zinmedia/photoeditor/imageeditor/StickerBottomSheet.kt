@@ -2,98 +2,113 @@ package com.zinmedia.photoeditor.imageeditor
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.drawable.BitmapDrawable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil3.ImageLoader
+import androidx.compose.ui.unit.sp
+import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.toBitmap
+import com.zinmedia.photoeditor.ui.EditorBottomSheet
+import com.zinmedia.photoeditor.ui.TrayTabs
 
-
-// StickerBottomSheet.kt
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3Api::class)
+/** Tray stiker: satu sheet dengan tab Emoji dan Stiker. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StickerBottomSheet(
+fun StickerTraySheet(
+    onEmojiSelected: (String) -> Unit,
     onStickerSelected: (Bitmap) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
-    val stickerUrls = remember { StickerData.stickerUrls }
+    var tab by rememberSaveable { mutableIntStateOf(0) }
 
-    ModalBottomSheet(
+    EditorBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(),
-      //  containerColor = Color(0xFF1E1E1E)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .navigationBarsPadding()
-        ) {
-            // Header
-            Text(
-                text = "Stickers",
-                style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            // Stickers Grid
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
+        TrayTabs(
+            tabs = listOf("Emoji", "Stiker"),
+            selected = tab,
+            onSelect = { tab = it },
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        when (tab) {
+            0 -> LazyVerticalGrid(
+                columns = GridCells.Fixed(7),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 600.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    .height(TrayHeight),
+                contentPadding = PaddingValues(horizontal = 12.dp),
             ) {
-                items(stickerUrls) { stickerUrl ->
-                    StickerItemReliable(
-                        stickerUrl = stickerUrl,
-                        onStickerSelected = onStickerSelected,
-                    )
+                items(EmojiData.emojis) { emoji ->
+                    Box(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onEmojiSelected(emoji) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(emoji, fontSize = 28.sp)
+                    }
+                }
+            }
+
+            else -> LazyVerticalGrid(
+                columns = GridCells.Fixed(4),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(TrayHeight),
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(StickerData.stickerUrls) { url ->
+                    StickerCell(url = url, onStickerSelected = onStickerSelected)
                 }
             }
         }
     }
 }
 
-
 @Composable
-fun StickerItemReliable(
-    stickerUrl: String,
+private fun StickerCell(
+    url: String,
     onStickerSelected: (Bitmap) -> Unit,
 ) {
     val context = LocalContext.current
@@ -101,42 +116,48 @@ fun StickerItemReliable(
 
     Box(
         modifier = Modifier
-            .size(100.dp)
-            .clickable(
-                enabled = !isLoading,
-                onClick = {
-                    // Load bitmap ketika diklik
-                    loadStickerSimple(context, stickerUrl, onStickerSelected)
-                }
-            ),
-        contentAlignment = Alignment.Center
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = !isLoading) { loadSticker(context, url, onStickerSelected) }
+            .padding(6.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        // Tampilkan preview image
         AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(stickerUrl)
-                .size(100, 100)
-                .build(),
-            contentDescription = "Sticker",
-            modifier = Modifier
-                .fillMaxSize(),
+            model = ImageRequest.Builder(context).data(url).size(256, 256).build(),
+            contentDescription = "Stiker",
+            modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Fit,
             onLoading = { isLoading = true },
             onSuccess = { isLoading = false },
-            onError = { isLoading = false }
+            onError = { isLoading = false },
         )
-
         if (isLoading) {
             CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(20.dp),
                 strokeWidth = 2.dp,
-                color = Color.White.copy(alpha = 0.5f)
+                color = Color.White.copy(alpha = 0.5f),
             )
         }
     }
 }
 
-// StickerData.kt
+private val TrayHeight = 360.dp
+
+/** Muat stiker sebagai bitmap software (dibutuhkan engine editor untuk digambar ke Canvas). */
+private fun loadSticker(
+    context: Context,
+    url: String,
+    onLoaded: (Bitmap) -> Unit,
+) {
+    val request = ImageRequest.Builder(context)
+        .data(url)
+        .size(400, 400)
+        .allowHardware(false)
+        .target { image -> onLoaded(image.toBitmap()) }
+        .build()
+    SingletonImageLoader.get(context).enqueue(request)
+}
+
 object StickerData {
     // Image Urls from flaticon(https://www.flaticon.com/stickers-pack/food-289)
     val stickerUrls = listOf(
@@ -165,38 +186,25 @@ object StickerData {
     )
 }
 
-data class StickerItem(
-    val url: String,
-    val id: Int
-)
-
-
-// Helper function untuk load bitmap dengan ukuran yang tepat
-private fun loadStickerSimple(
-    context: Context,
-    stickerUrl: String,
-    onStickerLoaded: (Bitmap) -> Unit
-) {
-    val imageLoader = ImageLoader.Builder(context)
-        .build()
-
-    val request = ImageRequest.Builder(context)
-        .data(stickerUrl)
-        .size(400, 400)
-        .allowHardware(false) // ⬅️ Ini yang paling penting
-        .target { drawable ->
-            try {
-//                val bitmap = (drawable as? BitmapDrawable)?.bitmap
-//                bitmap?.let { onStickerLoaded(it) }
-                val bitmap = drawable.toBitmap()
-                bitmap?.let {
-                    onStickerLoaded(it)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-        .build()
-
-    imageLoader.enqueue(request)
+object EmojiData {
+    val emojis = listOf(
+        "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇",
+        "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚",
+        "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩",
+        "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣",
+        "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬",
+        "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗",
+        "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯",
+        "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐",
+        "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈",
+        "👿", "👹", "👺", "🤡", "💩", "👻", "💀", "☠️", "👽", "👾",
+        "🤖", "🎃", "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿",
+        "😾", "👋", "🤚", "🖐️", "✋", "🖖", "👌", "🤏", "✌️", "🤞",
+        "🤟", "🤘", "🤙", "👈", "👉", "👆", "🖕", "👇", "☝️", "👍",
+        "👎", "✊", "👊", "🤛", "🤜", "👏", "🙌", "👐", "🤲", "🤝",
+        "🙏", "✍️", "💅", "🤳", "💪", "🦾", "🦵", "🦿", "🦶", "👣",
+        "👂", "🦻", "👃", "🧠", "🦷", "🦴", "👀", "👁️", "👅", "👄",
+        "💋", "🩸", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍",
+        "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝"
+    )
 }

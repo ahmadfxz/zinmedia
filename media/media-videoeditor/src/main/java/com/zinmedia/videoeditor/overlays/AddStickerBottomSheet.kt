@@ -1,82 +1,115 @@
 package com.zinmedia.videoeditor.overlays
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.zinmedia.videoeditor.ui.TrayTabs
 
-
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+/** Isi tray stiker: tab Emoji dan Stiker. */
 @Composable
 fun StickerBottomSheetContent(
+    onEmojiClick: (String) -> Unit,
     onStickerClick: (String) -> Unit,
 ) {
+    var tab by rememberSaveable { mutableIntStateOf(0) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 24.dp)
-    ) {
-        Text(
-            "Stickers",
-            color = Color.White,
-            fontSize = 18.sp,
-            modifier = Modifier.padding(16.dp)
-        )
+    TrayTabs(
+        tabs = listOf("Emoji", "Stiker"),
+        selected = tab,
+        onSelect = { tab = it },
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
+    Spacer(Modifier.height(12.dp))
+    when (tab) {
+        0 -> LazyVerticalGrid(
+            columns = GridCells.Fixed(7),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(TrayHeight),
+            contentPadding = PaddingValues(horizontal = 12.dp),
+        ) {
+            items(TrayEmojis) { emoji ->
+                Box(
+                    modifier = Modifier
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onEmojiClick(emoji) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(emoji, fontSize = 28.sp)
+                }
+            }
+        }
 
-        LazyVerticalGrid(
+        else -> LazyVerticalGrid(
             columns = GridCells.Fixed(4),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(300.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(12.dp)
+                .height(TrayHeight),
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(stickerUrls) { url ->
                 Box(
                     modifier = Modifier
-                        .size(75.dp)
+                        .aspectRatio(1f)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color.DarkGray)
-                        .clickable { onStickerClick(url) },
-                    contentAlignment = Alignment.Center
+                        .clickable { onStickerClick(url) }
+                        .padding(6.dp),
                 ) {
                     AsyncImage(
                         model = url,
-                        contentDescription = null,
-                        modifier = Modifier.size(60.dp),
-                        contentScale = ContentScale.Fit
+                        contentDescription = "Stiker",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
                     )
                 }
             }
         }
     }
-
 }
 
+private val TrayHeight = 360.dp
+
+private val TrayEmojis = listOf(
+    "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇",
+    "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚",
+    "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩",
+    "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣",
+    "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬",
+    "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗",
+    "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯",
+    "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐",
+    "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈",
+    "👋", "👌", "✌️", "🤞", "🤟", "🤘", "👍", "👎", "👏", "🙌",
+    "🙏", "💪", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍",
+    "💔", "💕", "💯", "🔥", "✨", "🎉", "🎂", "🌹", "⭐", "☀️",
+)
 
 private val stickerUrls = listOf(
     "https://cdn-icons-png.flaticon.com/256/4392/4392471.png",

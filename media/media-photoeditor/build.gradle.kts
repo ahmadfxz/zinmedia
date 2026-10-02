@@ -50,6 +50,7 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.composeIcons.evaIcons)
     implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
     debugImplementation(libs.androidx.ui.tooling)
 
     testImplementation(libs.junit)

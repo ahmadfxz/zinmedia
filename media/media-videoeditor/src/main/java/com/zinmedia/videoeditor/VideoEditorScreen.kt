@@ -32,7 +32,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -72,13 +71,18 @@ import com.zinmedia.videoeditor.overlays.StickerBottomSheetContent
 import com.zinmedia.videoeditor.overlays.StickerOverlays
 import com.zinmedia.videoeditor.overlays.TextEditorDialog
 import com.zinmedia.videoeditor.overlays.TextOverlays
-import com.zinmedia.videoeditor.widget.DurationBottomRow
 import com.zinmedia.videoeditor.widget.ExportProgress
-import com.zinmedia.videoeditor.widget.ExportResultScreen
-import com.zinmedia.videoeditor.widget.OverlayControls
 import com.zinmedia.videoeditor.widget.TrimControls
 import com.zinmedia.videoeditor.widget.VideoPreviewPlayer
-import com.zinmedia.videoeditor.ui.BottomChatDetail
+import com.zinmedia.videoeditor.ui.EditorBottomSheet
+import com.zinmedia.videoeditor.ui.DiscardChangesDialog
+import com.zinmedia.videoeditor.ui.EditorCaptionBar
+import com.zinmedia.videoeditor.ui.EditorColors
+import com.zinmedia.videoeditor.ui.EditorIconButton
+import com.zinmedia.videoeditor.ui.EditorScrim
+import com.zinmedia.videoeditor.ui.EditorTopBar
+import com.zinmedia.videoeditor.ui.FilterHint
+import androidx.compose.runtime.saveable.rememberSaveable
 import compose.icons.EvaIcons
 import compose.icons.evaicons.Fill
 import compose.icons.evaicons.fill.Clock
@@ -92,7 +96,8 @@ fun VideoEditorScreen(
     videoUri: Uri,
     onExportFinished: (Uri, String) -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    recipientLabel: String = "Status",
 ) {
     val owner = LocalViewModelStoreOwner.current
         ?: throw IllegalStateException("No ViewModelStoreOwner found")
@@ -114,10 +119,7 @@ fun VideoEditorScreen(
 
     var showTextEditor by remember { mutableStateOf(false) }
 
-    var exportedPath by remember { mutableStateOf<String?>(null) }
 
-    var showDurationStatus by remember { mutableStateOf(false) }
-    var durationStatus by remember { mutableIntStateOf(24) }
     val duration = vm.videoDurationMs.collectAsState().value
     val currentTimeMs = vm.currentPlayTimeMs.collectAsState().value
     val overlays by vm.overlays.collectAsState()
@@ -166,202 +168,162 @@ fun VideoEditorScreen(
     } else {
         9f / 16f
     }
+    var caption by rememberSaveable { mutableStateOf("") }
+    val showChrome = !isDrawingEnabled && !showTextEditor
+    var showDiscardDialog by remember { mutableStateOf(false) }
+    val trimStartMs by vm.startMs.collectAsState()
+    val trimEndMs by vm.endMs.collectAsState()
+
+    // Ada teks/stiker/coretan, filter, trim, atau keterangan yang belum dikirim.
+    fun hasChanges(): Boolean =
+        overlays.isNotEmpty() ||
+            filterEffectUrl.isNotEmpty() ||
+            caption.isNotBlank() ||
+            trimStartMs > 0 ||
+            (duration > 0 && trimEndMs in 1 until duration)
+
+    fun requestClose() {
+        if (hasChanges()) showDiscardDialog = true else onDismiss()
+    }
+
+    BackHandler(enabled = !isDrawingEnabled && !exporting) { requestClose() }
+
     Box(
-        //  contentAlignment = Alignment.Center,
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .statusBarsPadding()
-            .navigationBarsPadding()
+            .background(EditorColors.Background)
     ) {
+        // Video di tengah area aman, toolbar menimpa di atas/bawah.
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .padding(top = 30.dp)
-                .aspectRatio(aspect)
-                .onSizeChanged { layoutSize ->
-                    videoWidthPx = (layoutSize.width).toFloat()
-                    videoHeightPx = (layoutSize.height).toFloat()
-                },
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
         ) {
-            exoPlayer.value?.let {
-                VideoPreviewPlayer(
-                    player = it,
-                    modifier = Modifier
-                )
-            }
-
-            TextOverlays(vm, overlays, videoWidthPx, videoHeightPx)
-            StickerOverlays(vm, overlays, videoWidthPx, videoHeightPx)
-//            AddAudioButtonWidget(
-//                title = titleAudio.value,
-//                onClick = {
-//                    sheetMode = BottomSheetMode.AUDIO
-//                },
-//                onClear = {
-//                    titleAudio.value = null
-//                    vm.setAudioReplacement(context, null)
-//                },
-//                modifier = Modifier.align(Alignment.TopCenter)
-//            )
-
-
-            DrawingCanvas(drawViewModel)
-
-            if (exporting)
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.5f))
-                )
-            if (exporting)
-                ExportProgress(progress, modifier = Modifier.align(Alignment.Center))
-
-        }
-
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.align(Alignment.TopCenter)
-        ) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = !isDrawingEnabled && !showTextEditor,
-                enter = fadeIn(tween(200)) +
-                        slideInHorizontally(tween(200), initialOffsetX = { it }),
-                exit = fadeOut(tween(200)) +
-                        slideOutHorizontally(tween(200), targetOffsetX = { it })
-            ) {
-                OverlayControls(
-                    onFilter = { sheetMode = BottomSheetMode.FILTER },
-                    onText = { showTextEditor = true },
-                    onSticker = { sheetMode = BottomSheetMode.STICKER },
-                    onDraw = {
-                        drawViewModel.setDrawingEnabled(true)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .aspectRatio(aspect)
+                    .onSizeChanged { layoutSize ->
+                        videoWidthPx = layoutSize.width.toFloat()
+                        videoHeightPx = layoutSize.height.toFloat()
                     },
-                    onDismiss = onDismiss
-                )
-            }
-            TrimControls(
-                videoUri = videoUri,
-                videoDurationMs = duration,
-                maxTrimMs = 60_000,
-                currentPlayTimeMs = currentTimeMs,
-                onTrimChanged = { start, end ->
-                    vm.setTrim(start, end)
-                },
-                modifier = if (!isDrawingEnabled && !showTextEditor) Modifier else Modifier.height(0.dp)
-            )
+            ) {
+                exoPlayer.value?.let {
+                    VideoPreviewPlayer(player = it, modifier = Modifier)
+                }
 
+                TextOverlays(vm, overlays, videoWidthPx, videoHeightPx)
+                StickerOverlays(vm, overlays, videoWidthPx, videoHeightPx)
+                DrawingCanvas(drawViewModel)
+
+                if (exporting) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.5f))
+                    )
+                    ExportProgress(progress, modifier = Modifier.align(Alignment.Center))
+                }
+            }
         }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showChrome,
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(200)),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                EditorScrim(top = true, modifier = Modifier.align(Alignment.TopCenter))
+                EditorScrim(top = false, modifier = Modifier.align(Alignment.BottomCenter))
+
+                EditorTopBar(onClose = ::requestClose, modifier = Modifier.align(Alignment.TopCenter)) {
+                    EditorIconButton(R.drawable.zm_ic_sticker, "Stiker", { sheetMode = BottomSheetMode.STICKER })
+                    EditorIconButton(R.drawable.zm_ic_text, "Teks", { showTextEditor = true })
+                    EditorIconButton(R.drawable.zm_ic_pen, "Gambar", { drawViewModel.setDrawingEnabled(true) })
+                }
+
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .imePadding(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    FilterHint(
+                        expanded = sheetMode == BottomSheetMode.FILTER,
+                        onClick = { sheetMode = BottomSheetMode.FILTER },
+                    )
+                    EditorCaptionBar(
+                        caption = caption,
+                        onCaptionChange = { caption = it },
+                        recipientLabel = recipientLabel,
+                        sendEnabled = !exporting,
+                        onSend = {
+                            vm.exportVideo(
+                                context = context,
+                                cacheDir = VideoEditorFileProvider.outputDir(context),
+                                outputFile = null
+                            ) { path, error ->
+                                if (path != null) {
+                                    val uri = VideoEditorFileProvider.uriFor(context, File(path))
+                                    onExportFinished(uri, caption)
+                                    exoPlayer.value?.pause()
+                                } else {
+                                    error?.printStackTrace()
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+
+        // Timeline trim tetap di-compose (tinggi 0 saat disembunyikan) agar posisi trim tidak hilang.
+        TrimControls(
+            videoUri = videoUri,
+            videoDurationMs = duration,
+            maxTrimMs = 60_000,
+            currentPlayTimeMs = currentTimeMs,
+            onTrimChanged = { start, end -> vm.setTrim(start, end) },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 56.dp)
+                .then(if (showChrome) Modifier else Modifier.height(0.dp))
+        )
+
         androidx.compose.animation.AnimatedVisibility(
             visible = isDrawingEnabled,
-            enter = fadeIn(tween(200)) +
-                    slideInHorizontally(tween(200), initialOffsetX = { -40 }),
-            exit = fadeOut(tween(200)) +
-                    slideOutHorizontally(tween(200), targetOffsetX = { -40 })
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(200)),
         ) {
-            DrawingControls(drawViewModel, onDoneDraw = {
-                vm.setDrawOverlay(it)
-            }, modifier = Modifier.align(Alignment.TopCenter))
+            DrawingControls(drawViewModel, onDoneDraw = { vm.setDrawOverlay(it) })
         }
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(vertical = 4.dp)
-        ) {
-            BottomChatDetail(
-                enableButton = !exporting && !isDrawingEnabled && !showTextEditor,
-                inputTitle = "Tambahkan keterangan",
-                onSend = { message ->
-                    vm.exportVideo(
-                        context = context,
-                        cacheDir = VideoEditorFileProvider.outputDir(context),
-                        outputFile = null
-                    ) { path, error ->
-                        if (path != null) {
-                            exportedPath = path
-                            //   sheetMode = BottomSheetMode.RESULT
-
-                            //        konversi file path → uri via FileProvider
-                            val file = File(path)
-                            val uri = VideoEditorFileProvider.uriFor(context, file)
-                            onExportFinished(uri, message)
-//
-                            exoPlayer.let { it.value?.pause() }
-                        } else error?.printStackTrace()
-                    }
-                },
-                modifier = Modifier.imePadding()
-            )
-
-//            Box(
-//                modifier = Modifier.fillMaxWidth(),
-//                contentAlignment = Alignment.CenterStart
-//            ) {
-//
-//                // Panel Duration
-//                androidx.compose.animation.AnimatedVisibility(
-//                    visible = showDurationStatus,
-//                    enter = fadeIn(tween(200)) +
-//                            slideInHorizontally(tween(200), initialOffsetX = { it }),
-//                    exit = fadeOut(tween(200)) +
-//                            slideOutHorizontally(tween(200), targetOffsetX = { it })
-//                ) {
-//                    DurationBottomRow(
-//                        inisialValue = durationStatus,
-//                        onSelect = {
-//                            durationStatus = it
-//                            showDurationStatus = false
-//                        }
-//                    )
-//                }
-//
-//                // Row kecil
-//                androidx.compose.animation.AnimatedVisibility(
-//                    visible = !showDurationStatus,
-//                    enter = fadeIn(tween(200)) +
-//                            slideInHorizontally(tween(200), initialOffsetX = { -40 }),
-//                    exit = fadeOut(tween(200)) +
-//                            slideOutHorizontally(tween(200), targetOffsetX = { -40 })
-//                ) {
-//                    Row(
-//                        verticalAlignment = Alignment.CenterVertically,
-//                        horizontalArrangement = Arrangement.SpaceBetween,
-//                        modifier = Modifier
-//                            .padding(vertical = 6.dp)
-//                            .clickable { showDurationStatus = true }
-//                    ) {
-//                        Icon(
-//                            painter = painterResource(R.drawable.ic_clock),
-//                            contentDescription = "Clock",
-//                            tint = Color.Green.copy(alpha = 0.5f),
-//                            modifier = Modifier.size(25.dp)
-//                        )
-//                        Spacer(Modifier.width(6.dp))
-//
-//                        Text(
-//                            "Status $durationStatus jam",
-//                            style = MaterialTheme.typography.labelSmall,
-//                        )
-//                    }
-//                }
-//            }
-
-
-        }
-
     }
 
     if (sheetMode != BottomSheetMode.NONE) {
-        ModalBottomSheet(
+        EditorBottomSheet(
             onDismissRequest = { sheetMode = BottomSheetMode.NONE },
             sheetState = bottomSheetState,
-            containerColor = Color(0xFF111111)
         ) {
             when (sheetMode) {
                 BottomSheetMode.STICKER -> {
 
                     StickerBottomSheetContent(
+                        onEmojiClick = { emoji ->
+                            vm.addOverlay(
+                                Overlay(
+                                    type = Overlay.Type.TEXT,
+                                    text = emoji,
+                                    fontSize = 50.sp,
+                                    scale = 0.8f,
+                                )
+                            )
+                            sheetMode = BottomSheetMode.NONE
+                        },
                         onStickerClick = {
                             scope.launch {
                                 val sticker = vm.addStickerFromUrl(
@@ -424,6 +386,13 @@ fun VideoEditorScreen(
             }
         }
     }
+    if (showDiscardDialog) {
+        DiscardChangesDialog(
+            onDiscard = onDismiss,
+            onDismiss = { showDiscardDialog = false },
+        )
+    }
+
     if (showTextEditor) {
         TextEditorDialog(
             initialText = "",

@@ -5,25 +5,21 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,190 +34,122 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import compose.icons.EvaIcons
-import compose.icons.evaicons.Fill
-import compose.icons.evaicons.fill.Close
+import androidx.compose.ui.unit.sp
 import com.zinmedia.photoeditor.engine.PhotoFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
-// FilterItem.kt
 data class FilterItem(
     val filter: PhotoFilter,
     val iconPath: String,
     val name: String
 )
 
-// FilterData.kt
 object FilterData {
     val filters = listOf(
-        FilterItem(PhotoFilter.NONE, "filters/original.webp", "Original"),
-        FilterItem(PhotoFilter.AUTO_FIX, "filters/auto_fix.webp", "Auto Fix"),
-        FilterItem(PhotoFilter.BRIGHTNESS, "filters/brightness.webp", "Brightness"),
-        FilterItem(PhotoFilter.CONTRAST, "filters/contrast.webp", "Contrast"),
-        FilterItem(PhotoFilter.DOCUMENTARY, "filters/documentary.webp", "Documentary"),
+        FilterItem(PhotoFilter.NONE, "filters/original.webp", "Asli"),
+        FilterItem(PhotoFilter.AUTO_FIX, "filters/auto_fix.webp", "Auto"),
+        FilterItem(PhotoFilter.BRIGHTNESS, "filters/brightness.webp", "Cerah"),
+        FilterItem(PhotoFilter.CONTRAST, "filters/contrast.webp", "Kontras"),
+        FilterItem(PhotoFilter.DOCUMENTARY, "filters/documentary.webp", "Dokumenter"),
         FilterItem(PhotoFilter.DUE_TONE, "filters/dual_tone.webp", "Dual Tone"),
         FilterItem(PhotoFilter.FILL_LIGHT, "filters/fill_light.webp", "Fill Light"),
         FilterItem(PhotoFilter.FISH_EYE, "filters/fish_eye.webp", "Fish Eye"),
         FilterItem(PhotoFilter.GRAIN, "filters/grain.webp", "Grain"),
-        FilterItem(PhotoFilter.GRAY_SCALE, "filters/gray_scale.webp", "Gray Scale"),
-        FilterItem(PhotoFilter.LOMISH, "filters/lomish.webp", "Lomish"),
-        FilterItem(PhotoFilter.NEGATIVE, "filters/negative.webp", "Negative"),
-        FilterItem(PhotoFilter.POSTERIZE, "filters/posterize.webp", "Posterize"),
-        FilterItem(PhotoFilter.SATURATE, "filters/saturate.webp", "Saturate"),
+        FilterItem(PhotoFilter.GRAY_SCALE, "filters/gray_scale.webp", "Abu-abu"),
+        FilterItem(PhotoFilter.LOMISH, "filters/lomish.webp", "Lomo"),
+        FilterItem(PhotoFilter.NEGATIVE, "filters/negative.webp", "Negatif"),
+        FilterItem(PhotoFilter.POSTERIZE, "filters/posterize.webp", "Poster"),
+        FilterItem(PhotoFilter.SATURATE, "filters/saturate.webp", "Saturasi"),
         FilterItem(PhotoFilter.SEPIA, "filters/sepia.webp", "Sepia"),
-        FilterItem(PhotoFilter.SHARPEN, "filters/sharpen.webp", "Sharpen"),
-        FilterItem(PhotoFilter.TEMPERATURE, "filters/temprature.webp", "Temperature"),
+        FilterItem(PhotoFilter.SHARPEN, "filters/sharpen.webp", "Tajam"),
+        FilterItem(PhotoFilter.TEMPERATURE, "filters/temprature.webp", "Hangat"),
         FilterItem(PhotoFilter.TINT, "filters/tint.webp", "Tint"),
         FilterItem(PhotoFilter.VIGNETTE, "filters/vignette.webp", "Vignette"),
-        FilterItem(PhotoFilter.CROSS_PROCESS, "filters/cross_process.webp", "Cross Process"),
-        FilterItem(PhotoFilter.BLACK_WHITE, "filters/b_n_w.webp", "Black & White"),
-        FilterItem(PhotoFilter.FLIP_HORIZONTAL, "filters/flip_horizental.webp", "Flip Horizontal"),
-        FilterItem(PhotoFilter.FLIP_VERTICAL, "filters/flip_vertical.webp", "Flip Vertical"),
-        FilterItem(PhotoFilter.ROTATE, "filters/rotate.webp", "Rotate")
+        FilterItem(PhotoFilter.CROSS_PROCESS, "filters/cross_process.webp", "Cross"),
+        FilterItem(PhotoFilter.BLACK_WHITE, "filters/b_n_w.webp", "Hitam Putih"),
+        FilterItem(PhotoFilter.FLIP_HORIZONTAL, "filters/flip_horizental.webp", "Balik H"),
+        FilterItem(PhotoFilter.FLIP_VERTICAL, "filters/flip_vertical.webp", "Balik V"),
+        FilterItem(PhotoFilter.ROTATE, "filters/rotate.webp", "Putar"),
     )
 }
 
-// FiltersSection.kt
+/** Strip filter horizontal: thumbnail + nama, filter aktif diberi bingkai putih. */
 @Composable
 fun FiltersSection(
+    selectedFilter: PhotoFilter,
     filterListener: FilterListener,
-    onCloseClicked: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val filters = remember { FilterData.filters }
-
-    Column(modifier = modifier) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = "Filters",
-                style = MaterialTheme.typography.titleSmall,
-                color = Color.White,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+    ) {
+        items(FilterData.filters, key = { it.filter }) { item ->
+            FilterThumbnail(
+                item = item,
+                selected = item.filter == selectedFilter,
+                onClick = { filterListener.onFilterSelected(item.filter) },
             )
-
-            // Close button di pojok kanan
-            IconButton(
-                onClick = onCloseClicked,
-                modifier = Modifier
-                    .size(24.dp)
-            ) {
-                Icon(
-                    imageVector = EvaIcons.Fill.Close,
-                    contentDescription = "Close filters",
-                    tint = Color.White
-                )
-            }
-        }
-
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp)
-        ) {
-            items(filters) { filterItem ->
-                FilterItem(
-                    filterItem = filterItem,
-                    onFilterSelected = { filterListener.onFilterSelected(it) }
-                )
-            }
         }
     }
 }
 
 @Composable
-fun FilterItem(
-    filterItem: FilterItem,
-    onFilterSelected: (PhotoFilter) -> Unit,
-    modifier: Modifier = Modifier
+private fun FilterThumbnail(
+    item: FilterItem,
+    selected: Boolean,
+    onClick: () -> Unit,
 ) {
     val context = LocalContext.current
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
-
-    // Load bitmap asynchronously
-    LaunchedEffect(filterItem.iconPath) {
-        bitmap = withContext(Dispatchers.IO) {
-            getBitmapFromAsset(context, filterItem.iconPath)
-        }
+    LaunchedEffect(item.iconPath) {
+        bitmap = withContext(Dispatchers.IO) { loadAsset(context, item.iconPath) }
     }
+    val shape = RoundedCornerShape(10.dp)
 
     Column(
-        modifier = modifier
-            .width(80.dp)
-            .clickable { onFilterSelected(filterItem.filter) },
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier
+            .width(64.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Filter Preview Image
         Box(
             modifier = Modifier
-                .size(64.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF2A2A2A)),
-            contentAlignment = Alignment.Center
+                .size(width = 64.dp, height = 80.dp)
+                .clip(shape)
+                .background(Color(0xFF1F2C34))
+                .then(if (selected) Modifier.border(2.dp, Color.White, shape) else Modifier),
         ) {
-            if (bitmap != null) {
+            bitmap?.let {
                 Image(
-                    bitmap = bitmap!!.asImageBitmap(),
-                    contentDescription = filterItem.name,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = Color.White.copy(alpha = 0.5f)
+                    bitmap = it.asImageBitmap(),
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
-
-            // Selection indicator (you can add this later)
-            /*
-            if (isSelected) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .border(
-                            width = 2.dp,
-                            color = Color(0xFF0095F6),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                )
-            }
-            */
         }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Filter Name
+        Spacer(Modifier.height(6.dp))
         Text(
-            text = filterItem.name,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White,
+            text = item.name,
+            color = if (selected) Color.White else Color.White.copy(alpha = 0.7f),
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
         )
     }
 }
 
-// Helper function to load bitmap from assets
-private fun getBitmapFromAsset(context: Context, strName: String): Bitmap? {
-    return try {
-        context.assets.open(strName).use { inputStream ->
-            BitmapFactory.decodeStream(inputStream)
-        }
+private fun loadAsset(context: Context, path: String): Bitmap? =
+    try {
+        context.assets.open(path).use(BitmapFactory::decodeStream)
     } catch (e: IOException) {
-        e.printStackTrace()
         null
     }
-}

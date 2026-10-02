@@ -177,6 +177,13 @@ class VideoEditorViewModel(
                     } else {
                         Log.e("LUT", "Gagal load LUT")
                     }
+                } else {
+                    // Tanpa filter: kosongkan efek preview.
+                    _exoPlayer?.apply {
+                        stop()
+                        setVideoEffects(emptyList())
+                        prepare()
+                    }
                 }
             }
         }

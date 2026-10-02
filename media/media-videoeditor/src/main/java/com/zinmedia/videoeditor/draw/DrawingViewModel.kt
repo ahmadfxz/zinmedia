@@ -21,7 +21,7 @@ data class DrawingUiState(
     val brushStyle: BrushStyle = BrushStyle.Pen,
     val paths: List<DrawPath> = emptyList(),
     val currentPoints: List<Offset> = emptyList(),
-    val currentColor: Color = Color.Black,
+    val currentColor: Color = Color.White,
     val currentStroke: Float = 25f
 )
 

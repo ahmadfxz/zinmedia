@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.util.Log
 import android.graphics.Bitmap
 import android.graphics.Typeface
@@ -17,7 +16,6 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AlertDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -27,8 +25,10 @@ import androidx.lifecycle.lifecycleScope
 import com.zinmedia.photoeditor.data.manager.FontManager
 import com.zinmedia.photoeditor.imageeditor.DrawWidget
 import com.zinmedia.photoeditor.imageeditor.EditImageScreen
-import com.zinmedia.photoeditor.imageeditor.EmojiBottomSheet
-import com.zinmedia.photoeditor.imageeditor.StickerBottomSheet
+import com.zinmedia.photoeditor.imageeditor.StickerTraySheet
+import com.zinmedia.photoeditor.imageeditor.crop.CropScreen
+import com.zinmedia.photoeditor.imageeditor.crop.CropState
+import com.zinmedia.photoeditor.ui.DiscardChangesDialog
 import com.zinmedia.photoeditor.imageeditor.TextEditorDialog
 import com.zinmedia.photoeditor.imageeditor.filters.FilterListener
 import com.zinmedia.photoeditor.imageeditor.tools.ToolType
@@ -71,7 +71,12 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
     private var textEditorBgInitialColor by mutableStateOf(Color.Transparent)
     private var editingTextView: View? = null
     private var showStickerBottomSheet by mutableStateOf(false)
-    private var showEmojiBottomSheet by mutableStateOf(false)
+    private var selectedFilter by mutableStateOf(PhotoFilter.NONE)
+    private var originalBitmap by mutableStateOf<Bitmap?>(null)
+    private var cropState by mutableStateOf(CropState())
+    private var showCrop by mutableStateOf(false)
+    private var caption by mutableStateOf("")
+    private var showDiscardDialog by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,41 +85,32 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
 
         initializePhotoEditor()
         setupBackPressHandler()
-        val isDarkMode =
-            (resources.configuration.uiMode and
-                    Configuration.UI_MODE_NIGHT_MASK) ==
-                    Configuration.UI_MODE_NIGHT_YES
-
+        // Editor selalu bertema gelap: ikon status & navigation bar terang di atas latar hitam.
         enableEdgeToEdge(
-            navigationBarStyle = if (isDarkMode) {
-                SystemBarStyle.dark(
-                    scrim = Color.Transparent.toArgb()
-                )
-            } else {
-                SystemBarStyle.light(
-                    scrim = Color.Transparent.toArgb(),
-                    darkScrim = Color.Transparent.toArgb()
-                )
-            }
+            statusBarStyle = SystemBarStyle.dark(Color.Transparent.toArgb()),
+            navigationBarStyle = SystemBarStyle.dark(Color.Transparent.toArgb()),
         )
         setContent {
             MarketplaceTheme {
                 EditImageScreen(
-                    currentTool = currentTool,
-                    isFilterVisible = isFilterVisible,
-                    isLoading = isLoading,
-                    snackbarMessage = snackbarMessage,
-                    onBackPressed = { onBackPressedDispatcher.onBackPressed() }, // PERBAIKAN
-                    onShareImage = { keterangan, durasi ->
-                        publishImage(keterangan, durasi)
-                        //    sharePreview()
-                    },
-                    //sharePreview() },
-                    onToolSelected = { toolType -> onToolSelected(toolType) },
                     photoEditorView = mPhotoEditorView,
+                    showChrome = !showDrawShape && !showTextEditor && !showCrop,
+                    isFilterVisible = isFilterVisible,
+                    selectedFilter = selectedFilter,
+                    isLoading = isLoading,
+                    recipientLabel = intent.getStringExtra(EXTRA_RECIPIENT_LABEL) ?: DEFAULT_RECIPIENT_LABEL,
+                    caption = caption,
+                    onCaptionChange = { caption = it },
+                    snackbarMessage = snackbarMessage,
+                    onClose = { onBackPressedDispatcher.onBackPressed() },
+                    onOpenCrop = { if (originalBitmap != null) showCrop = true },
+                    onOpenStickers = { onToolSelected(ToolType.STICKER) },
+                    onOpenText = { onToolSelected(ToolType.TEXT) },
+                    onOpenDraw = { onToolSelected(ToolType.SHAPE) },
+                    onToggleFilter = { onToolSelected(ToolType.FILTER) },
                     filterListener = this,
+                    onSend = { caption -> publishImage(caption, 24) },
                     onSnackbarShown = { snackbarMessage = null },
-                    onCloseFilter = { isFilterVisible = false }
                 )
 
                 if (showDrawShape) {
@@ -199,25 +195,42 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
                     )
                 }
 
+                if (showDiscardDialog) {
+                    DiscardChangesDialog(
+                        onDiscard = { finish() },
+                        onDismiss = { showDiscardDialog = false },
+                    )
+                }
+
+                val cropSource = originalBitmap
+                if (showCrop && cropSource != null) {
+                    CropScreen(
+                        original = cropSource,
+                        initial = cropState,
+                        onCancel = { showCrop = false },
+                        onDone = { state, cropped ->
+                            cropState = state
+                            mPhotoEditorView.source.setImageBitmap(cropped)
+                            // Engine mereset filter saat gambar diganti; pasang lagi filter aktif.
+                            mPhotoEditor.setFilterEffect(selectedFilter)
+                            showCrop = false
+                        },
+                    )
+                }
+
                 if (showStickerBottomSheet) {
-                    StickerBottomSheet(
+                    StickerTraySheet(
+                        onEmojiSelected = { emoji ->
+                            mPhotoEditor.addEmoji(emoji)
+                            currentTool = "Emoji"
+                            showStickerBottomSheet = false
+                        },
                         onStickerSelected = { bitmap ->
                             mPhotoEditor.addImage(bitmap)
                             currentTool = "Sticker"
                             showStickerBottomSheet = false
                         },
-                        onDismiss = { showStickerBottomSheet = false }
-                    )
-                }
-
-                if (showEmojiBottomSheet) {
-                    EmojiBottomSheet(
-                        onEmojiSelected = { emoji ->
-                            mPhotoEditor.addEmoji(emoji)
-                            currentTool = "Emoji"
-                            showEmojiBottomSheet = false
-                        },
-                        onDismiss = { showEmojiBottomSheet = false }
+                        onDismiss = { showStickerBottomSheet = false },
                     )
                 }
             }
@@ -268,6 +281,7 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
                 finish()
                 return@launch
             }
+            originalBitmap = bitmap
             mPhotoEditorView.source.setImageBitmap(bitmap)
         }
     }
@@ -307,6 +321,7 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
     override fun onTouchSourceImage(event: MotionEvent) {}
 
     override fun onFilterSelected(photoFilter: PhotoFilter) {
+        selectedFilter = photoFilter
         mPhotoEditor.setFilterEffect(photoFilter)
     }
 
@@ -315,7 +330,6 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
             ToolType.SHAPE -> {
                 isFilterVisible = false
                 showTextEditor = false
-                showEmojiBottomSheet = false
                 showStickerBottomSheet = false
                 mPhotoEditor.setBrushDrawingMode(true)
                 mShapeBuilder = ShapeBuilder()
@@ -342,12 +356,7 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
                 isFilterVisible = !isFilterVisible
             }
 
-            ToolType.EMOJI -> {
-                currentTool = "Emoji"
-                showEmojiBottomSheet = true
-            }
-
-            ToolType.STICKER -> {
+            ToolType.EMOJI, ToolType.STICKER -> {
                 currentTool = "Sticker"
                 showStickerBottomSheet = true
             }
@@ -441,22 +450,17 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
                 currentTool = "Edit"
             }
 
-            !mPhotoEditor.isCacheEmpty -> showSaveDialog()
-            else -> finish() // PERBAIKAN
+            hasChanges() -> showDiscardDialog = true
+            else -> finish()
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private fun showSaveDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("Apakah anda yakin ingin keluar?")
-            .setMessage("Perubahan tidak akan di simpan")
-           // .setPositiveButton("Terbitkan") { _, _ -> publishImage() }
-            .setNegativeButton("Keluar") { _, _ -> finish() } // PERBAIKAN
-            .setNeutralButton("Edit") { dialog, _ -> dialog.dismiss() }
-            .create()
-            .show()
-    }
+    /** Ada hasil edit (teks/stiker/gambar, crop, filter) atau keterangan yang belum dikirim. */
+    private fun hasChanges(): Boolean =
+        !mPhotoEditor.isCacheEmpty ||
+            !cropState.isIdentity ||
+            selectedFilter != PhotoFilter.NONE ||
+            caption.isNotBlank()
 
 //    private fun publishImage() {
 //        isLoading = true
@@ -561,6 +565,10 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
 
     companion object {
         const val PINCH_TEXT_SCALABLE_INTENT_KEY = "PINCH_TEXT_SCALABLE"
+
+        /** Label penerima di kiri tombol kirim, mis. "Status (Kontak)". Default: "Status". */
+        const val EXTRA_RECIPIENT_LABEL = "com.zinmedia.extra.RECIPIENT_LABEL"
+        private const val DEFAULT_RECIPIENT_LABEL = "Status"
         private const val TAG = "ImageEditorActivity"
     }
 }

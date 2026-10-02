@@ -1,14 +1,14 @@
 package com.zinmedia.videoeditor.overlays
 
-import android.graphics.Typeface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,19 +16,12 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,30 +34,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.zinmedia.videoeditor.core.helper.autoWrap
 import com.zinmedia.videoeditor.data.FontItem
-import com.zinmedia.videoeditor.widget.ColorPickerSection
+import com.zinmedia.videoeditor.ui.EditorColors
+import com.zinmedia.videoeditor.ui.EditorDoneButton
+import com.zinmedia.videoeditor.ui.EditorTopBar
 import com.zinmedia.videoeditor.ui.VerticalColorPicker
-import compose.icons.EvaIcons
-import compose.icons.evaicons.Fill
-import compose.icons.evaicons.fill.Close
-import kotlinx.coroutines.delay
 
+/** Latar teks yang bisa diputar lewat tombol "A": tanpa latar lalu beberapa warna. */
+private val TextBackgrounds = listOf(
+    Color.Transparent,
+    Color.White,
+    Color.Black,
+    Color(0xFFE53935),
+    Color(0xFF1E88E5),
+    Color(0xFFFFA000),
+)
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Mode teks: layar diredupkan, teks besar di tengah, slider warna di kanan,
+ * dan pilihan latar + font di atas keyboard.
+ */
 @Composable
 fun TextEditorDialog(
     initialText: String = "",
@@ -72,273 +73,191 @@ fun TextEditorDialog(
     fonts: List<FontItem>,
     initialBackgroundColor: Color,
     onDismissRequest: () -> Unit,
-    onTextEdited: (String, Color, Int, Int) -> Unit // Change to Int for color code
+    onTextEdited: (String, Color, Int, Int) -> Unit
 ) {
     var text by remember { mutableStateOf(initialText) }
-    var selectedColor by remember { mutableStateOf(initialColor) }
-    var selectedFontIndex by remember { mutableIntStateOf(0) }
-    val selectedFont = remember(selectedFontIndex) {
-        fonts.getOrNull(selectedFontIndex) ?: fonts.first()
+    var textColor by remember { mutableStateOf(initialColor) }
+    var fontIndex by remember { mutableIntStateOf(0) }
+    var backgroundIndex by remember {
+        mutableIntStateOf(TextBackgrounds.indexOf(initialBackgroundColor).coerceAtLeast(0))
     }
-    val colorOptions = listOf(
-        Color.Transparent to "None",
-        Color.Black to "Black",
-        Color.White to "White",
-        Color.Red to "Red",
-        Color.Blue to "Blue",
-        Color(0xFFFFA500) to "Orange"
-    )
+    val background = TextBackgrounds[backgroundIndex]
+    val fontFamily = fonts.getOrNull(fontIndex)?.typeface?.let { FontFamily(it) }
 
-    val initialIndex = colorOptions.indexOfFirst { it.first == initialBackgroundColor }
-        .takeIf { it != -1 } ?: 0
-    var currentColorIndex by remember { mutableIntStateOf(initialIndex) }
-
-    val backgroundColor = colorOptions[currentColorIndex].first
-
-
-    // Auto-focus dan show keyboard
     val focusRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-        // Delay sedikit untuk memastikan UI sudah siap
-        delay(100)
+    fun dismiss() {
+        keyboard?.hide()
+        onDismissRequest()
+    }
+
+    fun done() {
+        if (text.isNotBlank()) {
+            onTextEdited(text, background, contrastTextColor(textColor, background).toArgb(), fontIndex)
+        }
+        dismiss()
     }
 
     Dialog(
-        onDismissRequest = {
-            keyboardController?.hide()
-            onDismissRequest()
-        },
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
+        onDismissRequest = ::dismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .background(Color.Black.copy(alpha = 0.2f))
-                .clickable {
-                    keyboardController?.hide()
-                    onDismissRequest()
-                }
+                .background(Color.Black.copy(alpha = 0.6f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = ::done,
+                )
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-            ) {
-                // Header dengan Done button
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = {
-                            keyboardController?.hide()
-                            onDismissRequest()
-                        },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            EvaIcons.Fill.Close,
-                            contentDescription = "Close",
-                            tint = Color.White
-                        )
-                    }
-
-                    TextButton(
-                        onClick = {
-                            if (text.isNotEmpty()) {
-                              //  val newText = autoWrap(text, 22)
-                                onTextEdited(text, backgroundColor, selectedColor.toArgb(), selectedFontIndex)
-                            }
-                            keyboardController?.hide()
-                            onDismissRequest()
-                        },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = Color(0xFF2F2F2F),
-                            containerColor = Color(0xFFFFFFFF)
-                        ),
-                        enabled = text.isNotEmpty()
-                    ) {
-                        Text(
-                            "Selesai",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+            Column(Modifier.fillMaxSize()) {
+                EditorTopBar(onClose = ::dismiss) {
+                    TextBackgroundButton(
+                        background = background,
+                        textColor = textColor,
+                        onClick = { backgroundIndex = (backgroundIndex + 1) % TextBackgrounds.size },
+                    )
+                    EditorDoneButton(onClick = ::done)
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Text Input Area - FIXED VERSION
                 Box(
                     modifier = Modifier
+                        .weight(1f)
                         .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
+                        .padding(start = 24.dp, end = 64.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    // Gunakan BasicTextField untuk kontrol yang lebih baik
+                    val style = TextStyle(
+                        color = contrastTextColor(textColor, background),
+                        fontSize = 30.sp,
+                        lineHeight = 38.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        fontFamily = fontFamily,
+                        background = background,
+                    )
                     BasicTextField(
-                        maxLines = 5,
                         value = text,
                         onValueChange = { newText ->
-                            val maxChars = 50
-                            val maxLines = 5
-
-                            // Auto wrap
-
-                            val lineCount = newText.count { it == '\n' } + 1
-
-                            val charsAllowed = newText.length <= maxChars
-                            val linesAllowed = lineCount <= maxLines
-
-                            if (charsAllowed && linesAllowed) {
-                                text = newText
-                            }
+                            // Teks dirender ke video, jadi panjangnya dibatasi.
+                            val lines = newText.count { it == '\n' } + 1
+                            if (newText.length <= MaxTextChars && lines <= MaxTextLines) text = newText
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .focusRequester(focusRequester)
-                            .onFocusChanged { focusState ->
-                                if (focusState.isFocused) {
-                                    // Keyboard sudah otomatis show saat focus
-                                }
-                            },
-                        textStyle = MaterialTheme.typography.headlineMedium.copy(
-                            color = selectedColor,
-                            textAlign = TextAlign.Center,
-                            background = backgroundColor,
-                            fontFamily = selectedFont.typeface?.let {
-                                FontFamily(it)
-                            } ?: MaterialTheme.typography.headlineMedium.fontFamily
-                        ),
-                        cursorBrush = SolidColor(selectedColor),
-                        decorationBox = { innerTextField ->
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center
-                            ) {
+                            .focusRequester(focusRequester),
+                        textStyle = style,
+                        cursorBrush = SolidColor(EditorColors.Accent),
+                        decorationBox = { inner ->
+                            Box(contentAlignment = Alignment.Center) {
                                 if (text.isEmpty()) {
                                     Text(
-                                        maxLines = 1,
-                                        text = "Ketikan sesuatu...",
-                                        style = MaterialTheme.typography.headlineMedium.copy(
-                                            color = selectedColor.copy(alpha = 0.5f),
-                                            textAlign = TextAlign.Center,
-                                            background = backgroundColor,
-                                            fontFamily = selectedFont.typeface?.let {
-                                                FontFamily(it)
-                                            } ?: MaterialTheme.typography.headlineMedium.fontFamily
-                                        )
+                                        "Ketik teks",
+                                        style = style.copy(color = Color.White.copy(alpha = 0.5f), background = Color.Transparent),
                                     )
                                 }
-                                innerTextField()
-
+                                inner()
                             }
-                        }
+                        },
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Color Picker Section - FIXED
-                Column (modifier = Modifier.imePadding(),
-                    horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .height(35.dp)
-                                .width(45.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(backgroundColor)
-                                .border(
-                                    width = 2.dp,
-                                    color = Color.Gray,
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                                .clickable {
-                                    currentColorIndex = (currentColorIndex + 1) % colorOptions.size
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Aa",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = selectedColor
-                            )
-                        }
-
-                        LazyRow(
-                            modifier = Modifier.height(35.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            itemsIndexed(fonts) { index, font ->
-
-                                val isSelected = index == selectedFontIndex
-
-                                Box(
-                                    modifier = Modifier
-                                        .height(35.dp)
-                                        // .width(120.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            selectedFontIndex = index
-                                        }
-                                        .border(
-                                            width = if (isSelected) 2.dp else 1.dp,
-                                            color = if (isSelected) Color.White else Color.Gray,
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                        .background(
-                                            if (isSelected) Color(0x33FFFFFF) else Color.Transparent
-                                        )
-                                        .padding(horizontal = 12.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = font.name,
-                                        color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = font.typeface?.let { FontFamily(it) }
-                                            ?: MaterialTheme.typography.bodyLarge.fontFamily,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-                }
+                FontChips(
+                    fonts = fonts,
+                    selected = fontIndex,
+                    onSelect = { fontIndex = it },
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .imePadding()
+                        .padding(bottom = 12.dp),
+                )
             }
+
             VerticalColorPicker(
-                onColorChange = {
-                    selectedColor = it
-                },
-                colorThumb = selectedColor,
-                modifier = Modifier.align(Alignment.TopEnd)
+                onColorChange = { textColor = it },
+                colorThumb = textColor,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 120.dp, end = 10.dp),
             )
         }
     }
 }
 
+/** Tombol "A" dalam kotak: menampilkan gaya latar teks yang aktif. */
+@Composable
+private fun TextBackgroundButton(
+    background: Color,
+    textColor: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(EditorColors.IconContainer)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(background)
+                .border(1.5.dp, Color.White, RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("A", color = contrastTextColor(textColor, background), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
 
+@Composable
+private fun FontChips(
+    fonts: List<FontItem>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+    ) {
+        itemsIndexed(fonts) { index, font ->
+            val active = index == selected
+            Box(
+                modifier = Modifier
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(if (active) Color.White else EditorColors.Field)
+                    .clickable { onSelect(index) }
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = font.name,
+                    color = if (active) Color.Black else Color.White,
+                    fontSize = 14.sp,
+                    fontFamily = font.typeface?.let { FontFamily(it) },
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
 
+/** Saat teks berlatar dan warnanya sama dengan latar, pakai warna kontras agar tetap terbaca. */
+private fun contrastTextColor(textColor: Color, background: Color): Color =
+    if (background != Color.Transparent && background == textColor) {
+        if (background == Color.White) Color.Black else Color.White
+    } else {
+        textColor
+    }
+
+private const val MaxTextChars = 50
+private const val MaxTextLines = 5

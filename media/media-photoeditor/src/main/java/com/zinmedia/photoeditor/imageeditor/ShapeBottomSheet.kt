@@ -1,25 +1,16 @@
 package com.zinmedia.photoeditor.imageeditor
 
-import androidx.annotation.DrawableRes
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -27,17 +18,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import com.zinmedia.photoeditor.imageeditor.widget.button.JernihTextButton
-import com.zinmedia.photoeditor.imageeditor.widget.button.ShapeButton
 import com.zinmedia.photoeditor.R
+import com.zinmedia.photoeditor.engine.shape.ShapeType
+import com.zinmedia.photoeditor.ui.EditorDoneButton
+import com.zinmedia.photoeditor.ui.EditorIconButton
+import com.zinmedia.photoeditor.ui.EditorScrim
+import com.zinmedia.photoeditor.ui.EditorTopBar
 import com.zinmedia.photoeditor.ui.VerticalColorPicker
 import com.zinmedia.photoeditor.ui.VerticalSizePicker
-import com.zinmedia.photoeditor.engine.shape.ShapeType
 
-// ShapeBottomSheet.kt
-@OptIn(ExperimentalMaterial3Api::class)
+private data class DrawTool(val shape: ShapeType, val icon: Int, val label: String)
+
+private val DrawTools = listOf(
+    DrawTool(ShapeType.Brush, R.drawable.zm_ic_pen, "Pena"),
+    DrawTool(ShapeType.Line, R.drawable.ic_line, "Garis"),
+    DrawTool(ShapeType.Arrow(), R.drawable.ic_arrow, "Panah"),
+    DrawTool(ShapeType.Oval, R.drawable.ic_oval, "Oval"),
+    DrawTool(ShapeType.Rectangle, R.drawable.ic_rectangle, "Kotak"),
+)
+
+/**
+ * Mode gambar: undo + "Selesai" di atas, slider warna di kanan,
+ * slider ukuran di kiri, dan pilihan kuas/bentuk/penghapus di bawah.
+ */
 @Composable
 fun DrawWidget(
     enableUndo: Boolean,
@@ -51,259 +55,80 @@ fun DrawWidget(
     onShapePicked: (ShapeType) -> Unit,
     onDone: () -> Unit,
 ) {
-    var selectedShape by remember { mutableStateOf<ShapeType>(ShapeType.Brush) }
-    var seletedColor by remember { mutableStateOf(Color.White) }
-    var currentStoke by remember { mutableStateOf(20f) }
+    if (!isEnable) return
 
-    if (isEnable) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
+    var selectedTool by remember { mutableStateOf(DrawTools.first()) }
+    var color by remember { mutableStateOf(Color.White) }
+    var stroke by remember { mutableFloatStateOf(20f) }
+
+    // Samakan warna & ukuran kuas engine dengan nilai awal slider.
+    LaunchedEffect(Unit) {
+        onColorChanged(color.toArgb())
+        onShapeSizeChanged(stroke)
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        EditorScrim(top = true, modifier = Modifier.align(Alignment.TopCenter))
+        EditorScrim(top = false, modifier = Modifier.align(Alignment.BottomCenter))
+
+        EditorTopBar(
+            onClose = onUndo,
+            closeIcon = R.drawable.zm_ic_undo,
+            closeDescription = "Urungkan",
+            closeEnabled = enableUndo,
+            modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            // Shape Picker - Top Center
-            ShapePickerSection(
-                enableUndo = enableUndo,
-                isEnableEraser = isEnableEraser,
-                onUndo = onUndo,
-                onDone = onDone,
-                selectedShape = selectedShape,
-                onEraser = onEraser,
-                onShapeSelected = { shapeType ->
-                    selectedShape = shapeType
-                    onShapePicked(shapeType)
-                },
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
-            // Color Picker - Bottom Center
-
-//            Column(
-//                modifier = Modifier
-//                    .align(Alignment.BottomCenter)
-//            ) {
-//                Row(
-//                    verticalAlignment = Alignment.CenterVertically,
-//                    horizontalArrangement = Arrangement.SpaceBetween,
-//                    modifier = Modifier
-//                        .fillMaxWidth()
-//                        .padding(12.dp)
-//                ) {
-//                    // Slider kiri - normal (kecil di kiri, besar di kanan)
-//                    CustomHorizontalSliderSection(
-//                        title = "Opacity",
-//                        onValueChange = { newValue ->
-//                            onOpacityChanged((newValue * 2.5).roundToInt())
-//                        },
-//                        valueRange = 10f..100f,
-//                    )
-
-                    // Slider kanan - terbalik (kecil di kanan, besar di kiri)
-//                    CustomHorizontalSliderSectionReversed(
-//                        title = "Size",
-//                        onValueChange = { newValue ->
-//                            onShapeSizeChanged(newValue)
-//                        },
-//                        valueRange = 10f..100f,
-//                    )
-//                }
-//            }
-
-            VerticalColorPicker(
-                onColorChange = {
-                    onColorChanged(it.toArgb())
-                    seletedColor = it
-                },
-                colorThumb = seletedColor,
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp)
-            )
-            VerticalSizePicker(
-                onValueChange = {
-                    onShapeSizeChanged(it)
-                    currentStoke = it
-                },
-                currentStroke = currentStoke,
-                modifier = Modifier.align(Alignment.CenterStart).padding(start = 12.dp)
-            )
-
+            EditorDoneButton(onClick = onDone)
         }
-    }
-}
 
-@Composable
-private fun ShapePickerSection(
-    enableUndo: Boolean,
-    isEnableEraser: Boolean,
-    onUndo: () -> Unit,
-    onDone: () -> Unit,
-    onEraser: () -> Unit,
-    selectedShape: ShapeType,
-    onShapeSelected: (ShapeType) -> Unit,
-    modifier: Modifier,
-) {
-    var showMoreOptions by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Done Button
-        JernihTextButton(
-            title = "Selesai",
-            onClick = onDone,
-        )
-        Spacer(modifier = Modifier.weight(1f))
-
-        // Undo Button
-        if (enableUndo)
-            ShapeButton(
-                isSelected = true,
-                onClick = {
-                    onUndo()
-                },
-                iconRes = R.drawable.ic_undo,
-            )
-
-        ShapeButton(
-            isSelected = isEnableEraser,
-            onClick = {
-                onEraser()
+        VerticalColorPicker(
+            onColorChange = {
+                color = it
+                onColorChanged(it.toArgb())
             },
-            iconRes = R.drawable.ic_eraser,
+            colorThumb = color,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 120.dp, end = 10.dp),
         )
 
-        // Basic Shapes - Brush dan Line (selalu visible)
-        ShapeOption(
-            shapeType = ShapeType.Brush,
-            iconRes = R.drawable.ic_brush,
-            isSelected = selectedShape == ShapeType.Brush && !isEnableEraser,
-            onSelected = onShapeSelected
+        VerticalSizePicker(
+            onValueChange = {
+                stroke = it
+                onShapeSizeChanged(it)
+            },
+            currentStroke = stroke,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 12.dp),
         )
 
-        ShapeOption(
-            shapeType = ShapeType.Line,
-            iconRes = R.drawable.ic_line, // Ganti dengan icon line yang sesuai
-            isSelected = selectedShape == ShapeType.Line && !isEnableEraser,
-            onSelected = onShapeSelected
-        )
-
-        // More Options Button dengan dropdown
-        Box {
-            // More Options Button
-            ShapeButton(
-                isSelected = (selectedShape == ShapeType.Rectangle || selectedShape == ShapeType.Oval || selectedShape is ShapeType.Arrow) && !isEnableEraser,
-                onClick = {
-                    showMoreOptions = !showMoreOptions
-                },
-                iconRes = R.drawable.ic_option,
-            )
-
-            // Dropdown Menu untuk shape tambahan
-            if (showMoreOptions) {
-                DropdownMenu(
-                    expanded = showMoreOptions,
-                    onDismissRequest = { showMoreOptions = false },
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.8f))
-                ) {
-                    // Rectangle Option
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_rectangle),
-                                    contentDescription = "Rectangle",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    "Rectangle",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        },
-                        onClick = {
-                            onShapeSelected(ShapeType.Rectangle)
-                            showMoreOptions = false
-                        }
-                    )
-
-                    // Oval Option
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_oval),
-                                    contentDescription = "Oval",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    "Oval",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        },
-                        onClick = {
-                            onShapeSelected(ShapeType.Oval)
-                            showMoreOptions = false
-                        }
-                    )
-
-                    // Arrow Option
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_arrow), // Ganti dengan icon arrow yang sesuai
-                                    contentDescription = "Arrow",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    "Arrow",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        },
-                        onClick = {
-                            onShapeSelected(ShapeType.Arrow()) // Sesuaikan dengan constructor Arrow Anda
-                            showMoreOptions = false
-                        }
-                    )
-                }
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+        ) {
+            DrawTools.forEach { tool ->
+                EditorIconButton(
+                    icon = tool.icon,
+                    contentDescription = tool.label,
+                    selected = !isEnableEraser && tool == selectedTool,
+                    onClick = {
+                        selectedTool = tool
+                        if (isEnableEraser) onEraser()
+                        onShapePicked(tool.shape)
+                    },
+                )
             }
+            EditorIconButton(
+                icon = R.drawable.ic_eraser,
+                contentDescription = "Penghapus",
+                selected = isEnableEraser,
+                onClick = onEraser,
+            )
         }
     }
-}
-
-
-@Composable
-private fun ShapeOption(
-    shapeType: ShapeType,
-    @DrawableRes iconRes: Int,
-    isSelected: Boolean,
-    onSelected: (ShapeType) -> Unit
-) {
-    ShapeButton(
-        isSelected = isSelected,
-        onClick = {
-            onSelected(shapeType)
-        },
-        iconRes = iconRes,
-    )
 }
