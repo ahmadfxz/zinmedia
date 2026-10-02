@@ -19,7 +19,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.core.content.FileProvider
 import androidx.media3.common.util.UnstableApi
 import com.zinmedia.videoeditor.ui.theme.MarketplaceTheme
 import com.zinmedia.videoeditor.ui.LocalImageLoader
@@ -54,8 +53,6 @@ class VideoEditorActivity : ComponentActivity() {
         // Ambil URI yang dikirim aplikasi utama
         val inputUri = intent?.data
             ?: intent?.getParcelableExtra<Uri>("video_uri")
-
-        //  val inputUri = getVideoUriFromAssets(this, "sample.mp4")
 
         if (inputUri == null) {
             finish()
@@ -105,23 +102,4 @@ class VideoEditorActivity : ComponentActivity() {
     }
 }
 
-
-private fun getVideoUriFromAssets(context: Context, assetName: String): Uri {
-    val file = File(context.cacheDir, assetName)
-
-    // Copy hanya jika belum ada
-    if (!file.exists()) {
-        context.assets.open(assetName).use { input ->
-            FileOutputStream(file).use { output ->
-                input.copyTo(output)
-            }
-        }
-    }
-
-    return FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.provider",
-        file
-    )
-}
 

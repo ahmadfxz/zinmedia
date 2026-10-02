@@ -54,7 +54,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
@@ -276,7 +275,7 @@ fun VideoEditorScreen(
                 onSend = { message ->
                     vm.exportVideo(
                         context = context,
-                        cacheDir = context.cacheDir,
+                        cacheDir = VideoEditorFileProvider.outputDir(context),
                         outputFile = null
                     ) { path, error ->
                         if (path != null) {
@@ -285,11 +284,7 @@ fun VideoEditorScreen(
 
                             //        konversi file path → uri via FileProvider
                             val file = File(path)
-                            val uri = FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                file
-                            )
+                            val uri = VideoEditorFileProvider.uriFor(context, file)
                             onExportFinished(uri, message)
 //
                             exoPlayer.let { it.value?.pause() }

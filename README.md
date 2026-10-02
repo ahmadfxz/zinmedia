@@ -29,7 +29,7 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "2.0.0"
+zinmedia = "3.0.0"
 
 [libraries]
 zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }
@@ -47,41 +47,25 @@ dependencies {
 
 ## Setup di aplikasi
 
-Library ini tidak mendaftarkan activity atau FileProvider sendiri. Aplikasi harus menambahkannya.
+Tidak perlu menambahkan apa pun ke `AndroidManifest.xml`. Activity editor dan FileProvider sudah didaftarkan oleh library, lalu otomatis digabung ke manifest aplikasi:
 
-### 1. AndroidManifest.xml
+| Modul | Activity | FileProvider authority |
+|---|---|---|
+| `media-photoeditor` | `com.zinmedia.photoeditor.ImageEditorActivity` | `${applicationId}.zinmedia.photoeditor.fileprovider` |
+| `media-videoeditor` | `com.zinmedia.videoeditor.VideoEditorActivity` | `${applicationId}.zinmedia.videoeditor.fileprovider` |
+
+FileProvider library hanya membuka folder `cache/zinmedia/<modul>/`, tempat hasil edit disimpan. Provider ini terpisah dari FileProvider milik aplikasi, jadi tidak ada konflik authority atau `file_paths`.
+
+Untuk mengubah atribut activity (misalnya theme), deklarasikan ulang activity tersebut di manifest aplikasi dengan `tools:replace`:
 
 ```xml
-<application ...>
-
-    <activity
-        android:name="com.zinmedia.photoeditor.ImageEditorActivity"
-        android:hardwareAccelerated="true"
-        android:windowSoftInputMode="adjustResize"
-        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
-
-    <activity
-        android:name="com.zinmedia.videoeditor.VideoEditorActivity"
-        android:hardwareAccelerated="true"
-        android:windowSoftInputMode="adjustResize"
-        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
-
-    <provider
-        android:name="androidx.core.content.FileProvider"
-        android:authorities="${applicationId}.fileprovider"
-        android:grantUriPermissions="true"
-        android:exported="false">
-        <meta-data
-            android:name="android.support.FILE_PROVIDER_PATHS"
-            android:resource="@xml/file_paths" />
-    </provider>
-
-</application>
+<activity
+    android:name="com.zinmedia.photoeditor.ImageEditorActivity"
+    android:theme="@style/ThemeAplikasi"
+    tools:replace="android:theme" />
 ```
 
-Authority **harus** `${applicationId}.fileprovider`, karena hasil edit dibagikan lewat authority itu. `@xml/file_paths` sudah disediakan oleh `media-videoeditor` (folder cache). Kalau aplikasi punya `file_paths.xml` sendiri, pastikan di dalamnya ada `<cache-path name="cache" path="." />`.
-
-### 2. Font
+### Font
 
 Font untuk fitur teks **tidak** dibundel di library. Taruh file berikut di `app/src/main/assets/` dengan nama persis seperti ini:
 

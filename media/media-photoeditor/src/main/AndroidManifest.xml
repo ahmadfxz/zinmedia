@@ -1,2 +1,19 @@
-<manifest>
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <activity
+            android:name="com.zinmedia.photoeditor.ImageEditorActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
+            android:windowSoftInputMode="adjustResize" />
+
+        <provider
+            android:name="com.zinmedia.photoeditor.PhotoEditorFileProvider"
+            android:authorities="${applicationId}.zinmedia.photoeditor.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+
 </manifest>

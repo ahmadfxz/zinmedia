@@ -23,7 +23,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.zinmedia.photoeditor.data.manager.FontManager
 import com.zinmedia.photoeditor.imageeditor.DrawWidget
@@ -363,7 +362,7 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
                 val tempFile = File.createTempFile(
                     "share_image_editor",
                     ".png",
-                    cacheDir // PERBAIKAN
+                    PhotoEditorFileProvider.outputDir(this@ImageEditorActivity)
                 )
 
                 FileOutputStream(tempFile).use { outputStream ->
@@ -372,9 +371,8 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
 
                 withContext(Dispatchers.Main) {
                     try {
-                        val shareUri = FileProvider.getUriForFile(
+                        val shareUri = PhotoEditorFileProvider.uriFor(
                             this@ImageEditorActivity,
-                            "${packageName}.fileprovider", // PERBAIKAN
                             tempFile
                         )
 
@@ -516,17 +514,13 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
                     mPhotoEditor.saveAsBitmap(saveSettings)
                 }
 
-                val file = File(cacheDir, "edited_image.png")
+                val file = File(PhotoEditorFileProvider.outputDir(this@ImageEditorActivity), "edited_image.png")
 
                 file.outputStream().use { output ->
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
                 }
 
-                val uri = FileProvider.getUriForFile(
-                    this@ImageEditorActivity,
-                    "${packageName}.fileprovider",
-                    file
-                )
+                val uri = PhotoEditorFileProvider.uriFor(this@ImageEditorActivity, file)
 
                 val resultIntent = Intent().apply {
 
