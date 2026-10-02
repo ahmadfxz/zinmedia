@@ -141,13 +141,3 @@ Untuk mengetes publish secara lokal:
 ```bash
 ./gradlew publishToMavenLocal -Pversion=0.0.0-local
 ```
-
-## Develop bersama aplikasi
-
-Supaya perubahan di library langsung terpakai di aplikasi tanpa rilis, letakkan repo ini bersebelahan dengan project aplikasi (`../zinmedia`), lalu tambahkan ke `settings.gradle.kts` aplikasi:
-
-```kotlin
-includeBuild("../zinmedia")
-```
-
-Gradle akan otomatis memakai source lokal sebagai pengganti artifact `com.github.ahmadfxz.zinmedia:*`. Hapus baris itu lagi sebelum build rilis.
