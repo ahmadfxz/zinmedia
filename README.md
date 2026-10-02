@@ -29,7 +29,7 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "3.0.0"
+zinmedia = "4.0.0"
 
 [libraries]
 zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }
