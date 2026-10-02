@@ -255,11 +255,20 @@ class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterLi
             finish()
             return
         }
-        try {
-            mPhotoEditorView.source.setImageURI(imageUri)
-        } catch (e: Exception) {
-            Log.e(TAG, "Gagal memuat gambar: $imageUri", e)
-            finish()
+        lifecycleScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                try {
+                    SampledBitmapLoader.load(this@ImageEditorActivity, imageUri)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Gagal memuat gambar: $imageUri", e)
+                    null
+                }
+            }
+            if (bitmap == null) {
+                finish()
+                return@launch
+            }
+            mPhotoEditorView.source.setImageBitmap(bitmap)
         }
     }
 
