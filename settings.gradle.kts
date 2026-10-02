@@ -21,7 +21,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "zinmedia"
 include(
-    ":media:media-editor",
     ":media:media-photoeditor",
     ":media:media-videoeditor",
 )

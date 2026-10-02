@@ -1,0 +1,563 @@
+package com.zinmedia.photoeditor
+
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.content.res.Configuration
+import android.util.Log
+import android.graphics.Bitmap
+import android.graphics.Typeface
+import android.os.Bundle
+import android.view.MotionEvent
+import android.view.View
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.SystemBarStyle
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AlertDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.content.FileProvider
+import androidx.lifecycle.lifecycleScope
+import com.zinmedia.photoeditor.data.manager.FontManager
+import com.zinmedia.photoeditor.imageeditor.DrawWidget
+import com.zinmedia.photoeditor.imageeditor.EditImageScreen
+import com.zinmedia.photoeditor.imageeditor.EmojiBottomSheet
+import com.zinmedia.photoeditor.imageeditor.StickerBottomSheet
+import com.zinmedia.photoeditor.imageeditor.TextEditorDialog
+import com.zinmedia.photoeditor.imageeditor.filters.FilterListener
+import com.zinmedia.photoeditor.imageeditor.tools.ToolType
+import com.zinmedia.photoeditor.ui.theme.MarketplaceTheme
+import com.zinmedia.photoeditor.R
+import com.zinmedia.photoeditor.engine.OnPhotoEditorListener
+import com.zinmedia.photoeditor.engine.PhotoEditor
+import com.zinmedia.photoeditor.engine.PhotoEditorView
+import com.zinmedia.photoeditor.engine.PhotoFilter
+import com.zinmedia.photoeditor.engine.SaveSettings
+import com.zinmedia.photoeditor.engine.TextStyleBuilder
+import com.zinmedia.photoeditor.engine.ViewType
+import com.zinmedia.photoeditor.engine.shape.ShapeBuilder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
+
+
+class ImageEditorActivity : ComponentActivity(), OnPhotoEditorListener, FilterListener {
+
+    private lateinit var mPhotoEditor: PhotoEditor
+    private lateinit var mPhotoEditorView: PhotoEditorView
+    private lateinit var mShapeBuilder: ShapeBuilder
+
+    private lateinit var fontManager: FontManager
+
+    // State variables
+    private var currentTool by mutableStateOf("Edit")
+    private var isUndoEnabled by mutableStateOf(false)
+    private var isRedoEnabled by mutableStateOf(false)
+    private var isFilterVisible by mutableStateOf(false)
+    private var isLoading by mutableStateOf(false)
+    private var snackbarMessage by mutableStateOf<String?>(null)
+    private var showDrawShape by mutableStateOf(false)
+    private var showTextEditor by mutableStateOf(false)
+    private var textEditorInitialText by mutableStateOf("")
+    private var textEditorInitialColor by mutableStateOf(Color.White)
+    private var textEditorBgInitialColor by mutableStateOf(Color.Transparent)
+    private var editingTextView: View? = null
+    private var showStickerBottomSheet by mutableStateOf(false)
+    private var showEmojiBottomSheet by mutableStateOf(false)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        fontManager = FontManager(this)
+
+        initializePhotoEditor()
+        setupBackPressHandler()
+        val isDarkMode =
+            (resources.configuration.uiMode and
+                    Configuration.UI_MODE_NIGHT_MASK) ==
+                    Configuration.UI_MODE_NIGHT_YES
+
+        enableEdgeToEdge(
+            navigationBarStyle = if (isDarkMode) {
+                SystemBarStyle.dark(
+                    scrim = Color.Transparent.toArgb()
+                )
+            } else {
+                SystemBarStyle.light(
+                    scrim = Color.Transparent.toArgb(),
+                    darkScrim = Color.Transparent.toArgb()
+                )
+            }
+        )
+        setContent {
+            MarketplaceTheme {
+                EditImageScreen(
+                    currentTool = currentTool,
+                    isFilterVisible = isFilterVisible,
+                    isLoading = isLoading,
+                    snackbarMessage = snackbarMessage,
+                    onBackPressed = { onBackPressedDispatcher.onBackPressed() }, // PERBAIKAN
+                    onShareImage = { keterangan, durasi ->
+                        publishImage(keterangan, durasi)
+                        //    sharePreview()
+                    },
+                    //sharePreview() },
+                    onToolSelected = { toolType -> onToolSelected(toolType) },
+                    photoEditorView = mPhotoEditorView,
+                    filterListener = this,
+                    onSnackbarShown = { snackbarMessage = null },
+                    onCloseFilter = { isFilterVisible = false }
+                )
+
+                if (showDrawShape) {
+                    DrawWidget(
+                        enableUndo = isUndoEnabled,
+                        onUndo = {
+                            isUndoEnabled = mPhotoEditor.undo()
+                            isRedoEnabled = mPhotoEditor.isRedoAvailable
+                        },
+                        isEnable = showDrawShape,
+                        onColorChanged = { colorCode ->
+                            mPhotoEditor.setShape(mShapeBuilder.withShapeColor(colorCode))
+                        },
+                        onOpacityChanged = { opacity ->
+                            mPhotoEditor.setShape(mShapeBuilder.withShapeOpacity(opacity))
+                        },
+                        onShapeSizeChanged = { shapeSize ->
+                            mPhotoEditor.setShape(mShapeBuilder.withShapeSize(shapeSize))
+                        },
+                        onShapePicked = { shapeType ->
+                            if (currentTool != "Draw") {
+                                currentTool = "Draw"
+                                mPhotoEditor.setBrushDrawingMode(true)
+                            }
+                            mPhotoEditor.setShape(mShapeBuilder.withShapeType(shapeType))
+                        },
+                        onEraser = {
+                            if (currentTool != "Eraser") {
+                                mPhotoEditor.brushEraser()
+                                currentTool = "Eraser"
+                            } else {
+                                mPhotoEditor.setBrushDrawingMode(true)
+                                currentTool = "Draw"
+                            }
+
+                        },
+                        isEnableEraser = currentTool == "Eraser",
+                        onDone = {
+                            showDrawShape = false // Sembunyikan draw widget
+                            mPhotoEditor.setBrushDrawingMode(false) // ⬅️ INI YANG PENTING! Disable drawing mode
+                            currentTool = "Edit" // Kembali ke mode normal
+                        }
+                    )
+                }
+                if (showTextEditor) {
+                    TextEditorDialog(
+                        initialText = textEditorInitialText,
+                        initialColor = textEditorInitialColor,
+                        initialBackgroundColor = textEditorBgInitialColor,
+                        fonts = fontManager.fonts,
+                        onDismissRequest = {
+                            showTextEditor = false
+                            editingTextView = null
+                            currentTool = "Edit"
+                        },
+                        onTextEdited = { inputText, backgroundColor, colorCode, fontId ->
+                            if (editingTextView != null) {
+                                // Editing existing text
+                                val styleBuilder = TextStyleBuilder()
+                                styleBuilder.withTextColor(colorCode)
+                                styleBuilder.withBackgroundColor(backgroundColor.toArgb())
+
+                                val typeface = fontManager.getFont(fontId)
+                                styleBuilder.withTextFont(typeface)
+
+                                mPhotoEditor.editText(editingTextView!!, inputText, styleBuilder)
+                            } else {
+                                // Adding new text
+                                val styleBuilder = TextStyleBuilder()
+                                styleBuilder.withTextColor(colorCode)
+                                styleBuilder.withBackgroundColor(backgroundColor.toArgb())
+
+                                val typeface = fontManager.getFont(fontId)
+                                styleBuilder.withTextFont(typeface)
+                                styleBuilder.withTextSize(28f)
+                                mPhotoEditor.addText(inputText, styleBuilder)
+                            }
+                            currentTool = "Text"
+                            showTextEditor = false
+                            editingTextView = null
+                        }
+                    )
+                }
+
+                if (showStickerBottomSheet) {
+                    StickerBottomSheet(
+                        onStickerSelected = { bitmap ->
+                            mPhotoEditor.addImage(bitmap)
+                            currentTool = "Sticker"
+                            showStickerBottomSheet = false
+                        },
+                        onDismiss = { showStickerBottomSheet = false }
+                    )
+                }
+
+                if (showEmojiBottomSheet) {
+                    EmojiBottomSheet(
+                        onEmojiSelected = { emoji ->
+                            mPhotoEditor.addEmoji(emoji)
+                            currentTool = "Emoji"
+                            showEmojiBottomSheet = false
+                        },
+                        onDismiss = { showEmojiBottomSheet = false }
+                    )
+                }
+            }
+        }
+    }
+
+
+    private fun initializePhotoEditor() {
+        mPhotoEditorView = PhotoEditorView(this).apply {
+            id = R.id.photoEditorView // PERBAIKAN
+            layoutParams = FrameLayout.LayoutParams( // PERBAIKAN
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        }
+
+        // initializeFonts()
+
+        val pinchTextScalable =
+            intent.getBooleanExtra(PINCH_TEXT_SCALABLE_INTENT_KEY, true) // PERBAIKAN
+
+        mPhotoEditor = PhotoEditor.Builder(this, mPhotoEditorView)
+            .setPinchTextScalable(pinchTextScalable)
+            .build()
+
+        mPhotoEditor.setOnPhotoEditorListener(this)
+        mPhotoEditor.setFilterEffect(PhotoFilter.NONE)
+        setImageSource()
+    }
+
+    private fun setImageSource() {
+        val imageUri = intent.data
+        if (imageUri == null) {
+            Log.e(TAG, "ImageEditorActivity dibuka tanpa URI gambar")
+            finish()
+            return
+        }
+        try {
+            mPhotoEditorView.source.setImageURI(imageUri)
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal memuat gambar: $imageUri", e)
+            finish()
+        }
+    }
+
+    // Rest of your interface implementations...
+    override fun onEditTextChangeListener(
+        rootView: View,
+        text: String,
+        colorCode: Int,
+        bgColorCode: Int
+    ) {
+        if (currentTool != "Draw") {
+            textEditorInitialText = text
+            textEditorInitialColor = Color(colorCode)
+            textEditorBgInitialColor = Color(bgColorCode)
+            showTextEditor = true
+            editingTextView = rootView
+            currentTool = "Text"
+        }
+    }
+
+    override fun onAddViewListener(viewType: ViewType, numberOfAddedViews: Int) {
+        updateUndoRedoState()
+    }
+
+    override fun onRemoveViewListener(viewType: ViewType, numberOfAddedViews: Int) {
+        updateUndoRedoState()
+    }
+
+    private fun updateUndoRedoState() {
+        isUndoEnabled = mPhotoEditor.isUndoAvailable
+        isRedoEnabled = mPhotoEditor.isRedoAvailable
+    }
+
+    override fun onStartViewChangeListener(viewType: ViewType) {}
+    override fun onStopViewChangeListener(viewType: ViewType) {}
+    override fun onTouchSourceImage(event: MotionEvent) {}
+
+    override fun onFilterSelected(photoFilter: PhotoFilter) {
+        mPhotoEditor.setFilterEffect(photoFilter)
+    }
+
+    private fun onToolSelected(toolType: ToolType) {
+        when (toolType) {
+            ToolType.SHAPE -> {
+                isFilterVisible = false
+                showTextEditor = false
+                showEmojiBottomSheet = false
+                showStickerBottomSheet = false
+                mPhotoEditor.setBrushDrawingMode(true)
+                mShapeBuilder = ShapeBuilder()
+                mPhotoEditor.setShape(mShapeBuilder)
+                currentTool = "Draw"
+                showDrawShape = true
+            }
+
+            ToolType.TEXT -> {
+                textEditorInitialText = ""
+                textEditorInitialColor = Color.White
+                showTextEditor = true
+                editingTextView = null
+                currentTool = "Text"
+            }
+
+            ToolType.ERASER -> {
+                // mPhotoEditor.brushEraser()
+                // currentTool = "Eraser"
+            }
+
+            ToolType.FILTER -> {
+                currentTool = "Filter"
+                isFilterVisible = !isFilterVisible
+            }
+
+            ToolType.EMOJI -> {
+                currentTool = "Emoji"
+                showEmojiBottomSheet = true
+            }
+
+            ToolType.STICKER -> {
+                currentTool = "Sticker"
+                showStickerBottomSheet = true
+            }
+        }
+    }
+
+    private fun sharePreview() {
+        isLoading = true
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val saveSettings = SaveSettings.Builder()
+                    .setClearViewsEnabled(true)
+                    .setTransparencyEnabled(true)
+                    .build()
+
+                val bitmap = withContext(Dispatchers.Main) {
+                    mPhotoEditor.saveAsBitmap(saveSettings)
+                }
+
+                val tempFile = File.createTempFile(
+                    "share_image_editor",
+                    ".png",
+                    cacheDir // PERBAIKAN
+                )
+
+                FileOutputStream(tempFile).use { outputStream ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                }
+
+                withContext(Dispatchers.Main) {
+                    try {
+                        val shareUri = FileProvider.getUriForFile(
+                            this@ImageEditorActivity,
+                            "${packageName}.fileprovider", // PERBAIKAN
+                            tempFile
+                        )
+
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "image/*" // PERBAIKAN
+                            putExtra(Intent.EXTRA_STREAM, shareUri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+
+                        startActivity(Intent.createChooser(intent, "Share Image")) // PERBAIKAN
+                        snackbarMessage = "Sharing image..."
+
+                    } catch (e: Exception) {
+                        snackbarMessage = "Failed to share: ${e.message}"
+                    }
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    snackbarMessage = "Share failed: ${e.message}"
+                    e.printStackTrace()
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    isLoading = false
+                }
+            }
+        }
+    }
+
+    private fun setupBackPressHandler() {
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) { // PERBAIKAN
+                override fun handleOnBackPressed() {
+                    handleSystemBack()
+                }
+            })
+    }
+
+    private fun handleSystemBack() {
+        when {
+            currentTool == "Draw" -> {
+                currentTool = "Edit"
+                showDrawShape = false
+                mPhotoEditor.setBrushDrawingMode(false)
+            }
+
+            currentTool == "Eraser" -> {
+                currentTool = "Edit"
+                showDrawShape = false
+                mPhotoEditor.setBrushDrawingMode(false)
+            }
+
+            isFilterVisible -> {
+                isFilterVisible = false
+                currentTool = "Edit"
+            }
+
+            !mPhotoEditor.isCacheEmpty -> showSaveDialog()
+            else -> finish() // PERBAIKAN
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun showSaveDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Apakah anda yakin ingin keluar?")
+            .setMessage("Perubahan tidak akan di simpan")
+           // .setPositiveButton("Terbitkan") { _, _ -> publishImage() }
+            .setNegativeButton("Keluar") { _, _ -> finish() } // PERBAIKAN
+            .setNeutralButton("Edit") { dialog, _ -> dialog.dismiss() }
+            .create()
+            .show()
+    }
+
+//    private fun publishImage() {
+//        isLoading = true
+//
+//        lifecycleScope.launch(Dispatchers.IO) {
+//            try {
+//                val saveSettings = SaveSettings.Builder()
+//                    .setClearViewsEnabled(true)
+//                    .setTransparencyEnabled(true)
+//                    .build()
+//
+//                val bitmap = withContext(Dispatchers.Main) {
+//                    mPhotoEditor.saveAsBitmap(saveSettings)
+//                }
+//
+//                val file = File(cacheDir, "edited_image_editor.png")
+//                file.outputStream().use { output ->
+//                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+//                }
+//
+//                val uri = FileProvider.getUriForFile(
+//                    this@ImageEditorActivity,
+//                    "${packageName}.fileprovider",
+//                    file
+//                )
+//
+//                val resultIntent = Intent().apply {
+//                    data = uri
+//                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+//                }
+//
+//                withContext(Dispatchers.Main) {
+//                    setResult(Activity.RESULT_OK, resultIntent)
+//                    finish()
+//                }
+//
+//            } catch (e: Exception) {
+//                withContext(Dispatchers.Main) {
+//                    snackbarMessage = "Gagal menyimpan: ${e.message}"
+//                }
+//            } finally {
+//                isLoading = false
+//            }
+//        }
+//    }
+
+    private fun publishImage(
+        keterangan: String,
+        durasi: Int
+    ) {
+
+        isLoading = true
+
+        lifecycleScope.launch(Dispatchers.IO) {
+
+            try {
+
+                val saveSettings = SaveSettings.Builder()
+                    .setClearViewsEnabled(true)
+                    .setTransparencyEnabled(true)
+                    .build()
+
+                val bitmap = withContext(Dispatchers.Main) {
+                    mPhotoEditor.saveAsBitmap(saveSettings)
+                }
+
+                val file = File(cacheDir, "edited_image.png")
+
+                file.outputStream().use { output ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+                }
+
+                val uri = FileProvider.getUriForFile(
+                    this@ImageEditorActivity,
+                    "${packageName}.fileprovider",
+                    file
+                )
+
+                val resultIntent = Intent().apply {
+
+                    data = uri
+
+                    putExtra("keterangan", keterangan)
+                    putExtra("durasi", durasi)
+                    putExtra("media_type", "image")
+
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+
+                withContext(Dispatchers.Main) {
+
+                    setResult(Activity.RESULT_OK, resultIntent)
+
+                    finish()
+                }
+
+            } catch (e: Exception) {
+
+                withContext(Dispatchers.Main) {
+                    snackbarMessage = e.message
+                }
+            }
+        }
+    }
+
+
+    companion object {
+        const val PINCH_TEXT_SCALABLE_INTENT_KEY = "PINCH_TEXT_SCALABLE"
+        private const val TAG = "ImageEditorActivity"
+    }
+}

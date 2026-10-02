@@ -4,9 +4,8 @@ Library Android (Jetpack Compose) untuk mengedit foto dan video sebelum diunggah
 
 | Modul | Isi |
 |---|---|
-| `media-editor` | Editor foto: `ImageEditorActivity` |
-| `media-videoeditor` | Editor video: `VideoEditorActivity` (ekspor lewat Media3 Transformer) |
-| `media-photoeditor` | Engine editor foto yang dipakai `media-editor`. Ikut terpasang otomatis, tidak perlu ditambahkan sendiri. |
+| `media-photoeditor` | Editor foto: `com.zinmedia.photoeditor.ImageEditorActivity` |
+| `media-videoeditor` | Editor video: `com.zinmedia.videoeditor.VideoEditorActivity` (ekspor lewat Media3 Transformer) |
 
 Persyaratan: `minSdk` 23, `compileSdk` 36 atau lebih baru.
 
@@ -30,10 +29,10 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "1.0.0"
+zinmedia = "2.0.0"
 
 [libraries]
-zinmedia-editor = { module = "com.github.ahmadfxz.zinmedia:media-editor", version.ref = "zinmedia" }
+zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }
 zinmedia-videoeditor = { module = "com.github.ahmadfxz.zinmedia:media-videoeditor", version.ref = "zinmedia" }
 ```
 
@@ -41,7 +40,7 @@ zinmedia-videoeditor = { module = "com.github.ahmadfxz.zinmedia:media-videoedito
 
 ```kotlin
 dependencies {
-    implementation(libs.zinmedia.editor)
+    implementation(libs.zinmedia.photoeditor)
     implementation(libs.zinmedia.videoeditor)
 }
 ```
@@ -56,13 +55,13 @@ Library ini tidak mendaftarkan activity atau FileProvider sendiri. Aplikasi haru
 <application ...>
 
     <activity
-        android:name="com.jernih.editor.ImageEditorActivity"
+        android:name="com.zinmedia.photoeditor.ImageEditorActivity"
         android:hardwareAccelerated="true"
         android:windowSoftInputMode="adjustResize"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
     <activity
-        android:name="com.jernih.videoeditor.VideoEditorActivity"
+        android:name="com.zinmedia.videoeditor.VideoEditorActivity"
         android:hardwareAccelerated="true"
         android:windowSoftInputMode="adjustResize"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
@@ -123,7 +122,7 @@ editorLauncher.launch(
 )
 ```
 
-Kalau pengguna menutup editor tanpa menyimpan, `resultCode` bernilai `RESULT_CANCELED`.
+Kalau pengguna menutup editor tanpa menyimpan, atau URI tidak diberikan / gambar gagal dimuat, `resultCode` bernilai `RESULT_CANCELED`.
 
 ## Rilis versi baru
 

@@ -5,11 +5,12 @@ plugins {
 }
 
 android {
-    namespace = "com.zinmedia.videoeditor"
+    namespace = "com.zinmedia.photoeditor"
     compileSdk = 36
 
     defaultConfig {
         minSdk = 23
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -27,32 +28,35 @@ android {
     buildFeatures {
         compose = true
     }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.kotlinx.coroutines.android)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.compose.foundation)
     implementation(libs.composeIcons.evaIcons)
+    implementation(libs.coil.compose)
     debugImplementation(libs.androidx.ui.tooling)
 
-    implementation(libs.androidx.media3.exoplayer)
-    implementation(libs.androidx.media3.ui)
-    implementation(libs.androidx.media3.transformer)
-    implementation(libs.androidx.media3.effect)
-    implementation(libs.androidx.media3.common)
-
-    implementation(libs.coil.compose)
-    implementation(libs.coil.network.okhttp)
-}
-
-configurations.all {
-    exclude(group = "androidx.xr")
+    testImplementation(libs.junit)
+    testImplementation(libs.androidx.test.core.ktx)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.mockito.core)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.mockito.android)
 }
