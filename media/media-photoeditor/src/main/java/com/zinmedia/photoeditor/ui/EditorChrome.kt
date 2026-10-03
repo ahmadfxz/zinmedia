@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -56,7 +57,10 @@ import com.zinmedia.photoeditor.R
 public object EditorColors {
     public val Background: Color = Color.Black
     public val Field: Color = Color(0xFF1F2C34)
-    public val Accent: Color = Color(0xFF21C063)
+    /** Warna utama dari [com.zinmedia.photoeditor.PhotoEditorConfig.accentColor]. */
+    public val Accent: Color get() = Color(com.zinmedia.photoeditor.PhotoEditorConfig.accentColor)
+    /** Ikon/teks di atas [Accent]: hitam bila warna utama terang, selain itu putih. */
+    public val OnAccent: Color get() = if (Accent.luminance() > 0.6f) Color.Black else Color.White
     public val IconContainer: Color = Color.Black.copy(alpha = 0.35f)
     public val TextSecondary: Color = Color.White.copy(alpha = 0.6f)
     public val BottomBar: Color = Color.Black.copy(alpha = 0.6f)
@@ -207,6 +211,8 @@ public fun EditorCaptionBar(
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = stringResource(R.string.zm_caption_hint),
+    /** `false` = tanpa kolom keterangan (hanya label penerima & tombol kirim). */
+    showCaption: Boolean = true,
 ) {
     val focusManager = LocalFocusManager.current
     var showEmojis by rememberSaveable { mutableStateOf(false) }
@@ -219,7 +225,7 @@ public fun EditorCaptionBar(
             .fillMaxWidth()
             .then(if (captionFocused) Modifier.imePadding() else Modifier)
     ) {
-        Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 10.dp)) {
+        if (showCaption) Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 10.dp)) {
             AnimatedVisibility(visible = showEmojis) {
                 LazyRow(
                     modifier = Modifier
@@ -329,7 +335,7 @@ public fun EditorCaptionBar(
                 Icon(
                     painter = painterResource(R.drawable.zm_ic_send),
                     contentDescription = stringResource(R.string.zm_send),
-                    tint = Color.White,
+                    tint = EditorColors.OnAccent,
                     modifier = Modifier.size(24.dp),
                 )
             }

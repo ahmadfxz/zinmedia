@@ -15,7 +15,8 @@
     <string name="zm_camera_shutter">Ambil foto atau rekam</string>
     <string name="zm_camera_mode_photo">Foto</string>
     <string name="zm_camera_mode_15">15d</string>
-    <string name="zm_camera_mode_60">60d</string>
+    <string name="zm_camera_mode_30">30d</string>
+    <string name="zm_camera_mode_60">1m</string>
     <string name="zm_camera_processing">Memproses video…</string>
     <string name="zm_camera_permission_title">Izinkan akses kamera</string>
     <string name="zm_camera_permission_body">Kamera dibutuhkan untuk mengambil foto dan merekam video.</string>
@@ -23,7 +24,9 @@
     <string name="zm_camera_permission_settings">Buka pengaturan</string>
     <string name="zm_camera_hold_hint">Ketuk atau tahan untuk merekam</string>
     <string name="zm_camera_discard_title">Buang rekaman?</string>
-    <string name="zm_camera_discard_body">Klip yang sudah direkam akan dihapus.</string>
+    <string name="zm_camera_discard_body">Foto dan klip yang sudah diambil akan dihapus.</string>
+    <string name="zm_camera_remove_photo">Hapus foto</string>
+    <string name="zm_camera_photo_count">%1$d/%2$d</string>
     <string name="zm_camera_discard">Buang</string>
     <string name="zm_camera_cancel">Batal</string>
 </resources>

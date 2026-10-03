@@ -11,6 +11,6 @@ class EnumTest {
 
     @Test
     fun testNumberOfPhotoFilterTypes() {
-        assertEquals(PhotoFilter.values().size.toLong(), 24)
+        assertEquals(PhotoFilter.values().size.toLong(), 21)
     }
 }

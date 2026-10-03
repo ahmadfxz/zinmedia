@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import androidx.camera.video.Recording
+import com.zinmedia.composer.AllowedMedia
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -25,6 +26,7 @@ import java.io.File
 internal enum class CaptureMode(val maxMs: Long) {
     Photo(0),
     Video15(15_000),
+    Video30(30_000),
     Video60(60_000),
 }
 
@@ -47,10 +49,21 @@ internal class CameraState(
     private val scope: CoroutineScope,
     private val audioEnabled: () -> Boolean,
     private val onCaptured: (List<Uri>) -> Unit,
+    allowedMedia: AllowedMedia = AllowedMedia.All,
+    /** Batas foto yang ditampung sebelum ke editor; 1 = langsung ke editor. */
+    private val maxPhotos: Int = 1,
 ) {
     val filters: List<CameraFilter> = cameraFilters()
 
-    var mode by mutableStateOf(CaptureMode.Video15)
+    /** Mode rana yang tersedia sesuai jenis media yang diizinkan aplikasi. */
+    val modes: List<CaptureMode> = when (allowedMedia) {
+        AllowedMedia.All -> listOf(CaptureMode.Video15, CaptureMode.Video60, CaptureMode.Video30, CaptureMode.Photo)
+        AllowedMedia.Image -> listOf(CaptureMode.Photo)
+        AllowedMedia.Video -> listOf(CaptureMode.Video15, CaptureMode.Video60, CaptureMode.Video30)
+    }
+
+    /** Default: video 1 menit (atau Foto bila hanya foto yang diizinkan). */
+    var mode by mutableStateOf(if (allowedMedia == AllowedMedia.Image) CaptureMode.Photo else CaptureMode.Video60)
         private set
     var filterIndex by mutableIntStateOf(0)
         private set
@@ -67,6 +80,15 @@ internal class CameraState(
     var showFilters by mutableStateOf(false)
 
     val segments = mutableStateListOf<Segment>()
+    /** Foto yang sudah diambil (mode Foto, bila [maxPhotos] > 1). */
+    val photos = mutableStateListOf<File>()
+    val photoLimit: Int get() = maxPhotos
+    /** Bertambah tiap foto diambil; dipakai untuk efek kedip rana. */
+    var photoTakenCount by mutableIntStateOf(0)
+        private set
+    /** Sedang mengambil/menyimpan foto. */
+    var capturing by mutableStateOf(false)
+        private set
     var isRecording by mutableStateOf(false)
         private set
     /** Durasi segmen yang sedang direkam (ms, sebelum kecepatan). */
@@ -89,7 +111,10 @@ internal class CameraState(
         segments.sumOf { it.outputMs } + (currentSegmentMs / speed).toLong()
     }
 
-    val isBusy: Boolean get() = isRecording || countdown != null || processing != null
+    val isBusy: Boolean get() = isRecording || countdown != null || processing != null || capturing
+
+    /** Sudah ada klip video atau foto yang ditampung. */
+    val hasCaptures: Boolean get() = segments.isNotEmpty() || photos.isNotEmpty()
 
     private var recording: Recording? = null
     private var countdownJob: Job? = null
@@ -104,7 +129,7 @@ internal class CameraState(
 
     fun selectMode(newMode: CaptureMode) {
         // Mode tidak bisa diganti setelah ada segmen (durasi maksimum sudah dipakai).
-        if (isBusy || segments.isNotEmpty()) return
+        if (isBusy || hasCaptures || newMode !in modes) return
         mode = newMode
         if (newMode == CaptureMode.Photo) showSpeed = false
     }
@@ -233,8 +258,12 @@ internal class CameraState(
         segments.removeLastOrNull()?.file?.delete()
     }
 
-    /** Selesai merekam: gabungkan segmen lalu buka di editor. */
+    /** Selesai: buka foto yang ditampung, atau gabungkan segmen video, di editor. */
     fun finish() {
+        if (photos.isNotEmpty()) {
+            if (!capturing) onCaptured(photos.map { Uri.fromFile(it) })
+            return
+        }
         if (isRecording) {
             finishAfterRecording = true
             stopRecording()
@@ -255,28 +284,45 @@ internal class CameraState(
         }
     }
 
-    /** Hapus semua segmen (mis. setelah hasil dikirim, atau rekam ulang). */
+    /** Hapus semua klip & foto (mis. setelah hasil dikirim, atau mulai ulang). */
     fun reset() {
         segments.forEach { it.file.delete() }
         segments.clear()
+        photos.forEach { it.delete() }
+        photos.clear()
+    }
+
+    fun removePhoto(index: Int) {
+        if (capturing) return
+        photos.removeAt(index).delete()
     }
 
     // ---- foto ----
 
+    /**
+     * Ambil foto. Batas 1: langsung ke editor. Lebih dari 1: ditampung dulu; editor dibuka lewat
+     * tombol Selesai, atau otomatis saat batas tercapai.
+     */
     private fun takePhoto() {
-        if (processing != null) return
-        processing = 0f
+        if (capturing || processing != null || photos.size >= maxPhotos) return
+        capturing = true
         scope.launch {
             try {
                 val bitmap = withFlash { session.capturePhoto() } ?: return@launch
+                photoTakenCount++
                 val file = File(outputDir, "photo_${System.currentTimeMillis()}.jpg")
                 withContext(Dispatchers.IO) {
                     file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, JpegQuality, it) }
                     bitmap.recycle()
                 }
-                onCaptured(listOf(Uri.fromFile(file)))
+                if (maxPhotos <= 1) {
+                    onCaptured(listOf(Uri.fromFile(file)))
+                } else {
+                    photos += file
+                    if (photos.size >= maxPhotos) onCaptured(photos.map { Uri.fromFile(it) })
+                }
             } finally {
-                processing = null
+                capturing = false
             }
         }
     }

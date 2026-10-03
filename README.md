@@ -31,7 +31,7 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "4.3.0"
+zinmedia = "4.4.0"
 
 [libraries]
 zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }
@@ -71,7 +71,7 @@ Untuk mengubah atribut activity (misalnya theme), deklarasikan ulang activity te
     tools:replace="android:theme" />
 ```
 
-### Konten: stiker, emoji, dan filter
+### Konten & warna: stiker, emoji, filter, dan warna utama
 
 Library **tidak** membawa daftar stiker atau filter video. Aplikasi yang menentukannya, sekali saat aplikasi mulai:
 
@@ -86,8 +86,11 @@ class MyApp : Application() {
             VideoFilterOption("Vintage", cubeUrl = "https://…/vintage.cube", thumbnailUrl = "https://…/vintage.jpg"),
         )
 
-        // Atau, bila memakai media-composer, sekaligus:
-        MediaComposer.configure(stickers = …, videoFilters = …)
+        PhotoEditorConfig.accentColor = 0xFF1E88E5.toInt()
+        VideoEditorConfig.accentColor = PhotoEditorConfig.accentColor
+
+        // Atau, bila memakai media-composer / media-camera, sekaligus:
+        MediaComposer.configure(stickers = …, videoFilters = …, accentColor = 0xFF1E88E5.toInt())
     }
 }
 ```
@@ -98,6 +101,7 @@ class MyApp : Application() {
 | `emojis` | daftar emoji | emoji Unicode bawaan |
 | `PhotoEditorConfig.filters` | `PhotoFilterOption(filter, label)`: filter foto bawaan yang ditampilkan dan urutannya | semua filter |
 | `VideoEditorConfig.filters` | `VideoFilterOption(name, cubeUrl, thumbnailUrl)`: LUT 3D `.cube` | kosong → filter video disembunyikan |
+| `accentColor` | Warna utama (ARGB): tombol kirim/ekspor, tombol dialog konfirmasi (mis. keluar), kursor, indikator proses, serta tombol Selesai & izin di kamera. Ikon/teks di atasnya otomatis putih atau hitam sesuai terang warna. Tombol & progress **rekam** di kamera tetap merah. | hijau `0xFF21C063` |
 
 Pastikan lisensi stiker/LUT yang dipakai mengizinkan penggunaannya (mis. atribusi).
 
@@ -153,7 +157,16 @@ Intent(context, ImageEditorActivity::class.java).apply {
 }
 ```
 
-`VideoEditorActivity.EXTRA_RECIPIENT_LABEL` berlaku sama untuk editor video.
+Kolom keterangan bisa disembunyikan bila aplikasi tidak memakainya:
+
+```kotlin
+Intent(context, ImageEditorActivity::class.java).apply {
+    data = imageUri
+    putExtra(ImageEditorActivity.EXTRA_SHOW_CAPTION, false)
+}
+```
+
+`VideoEditorActivity.EXTRA_RECIPIENT_LABEL` dan `VideoEditorActivity.EXTRA_SHOW_CAPTION` berlaku sama untuk editor video.
 
 ## Hasil & penyimpanan
 
@@ -186,6 +199,33 @@ MediaComposerActivity.intent(context, listOf(uri), maxItems = 1)
 MediaComposerActivity.intent(context, pickedUris)
 ```
 
+### Jenis media: foto saja, video saja, atau keduanya
+
+Bila tidak diatur, foto dan video sama-sama didukung. Aplikasi bisa membatasi dengan `allowedMedia`:
+
+| `allowedMedia` | Editor gabungan | Kamera |
+|---|---|---|
+| `AllowedMedia.All` (default) | foto & video | mode 15d, 1m, 30d, Foto |
+| `AllowedMedia.Video` | hanya video; picker (+) hanya video | hanya 15d, 1m & 30d; galeri hanya video |
+| `AllowedMedia.Image` | hanya foto; picker (+) hanya foto | hanya mode Foto (tanpa izin mikrofon); galeri hanya foto |
+
+```kotlin
+MediaComposerActivity.intent(context, uris, allowedMedia = AllowedMedia.Video)
+CameraActivity.intent(context, allowedMedia = AllowedMedia.Image)
+```
+
+Media yang jenisnya tidak diizinkan dilewati. Bila tidak ada media yang tersisa, editor ditutup dengan `RESULT_CANCELED`.
+
+### Tanpa keterangan
+
+Kolom keterangan bisa disembunyikan bila aplikasi tidak memakainya (label penerima & tombol kirim tetap ada, hasil `EXTRA_CAPTION` kosong):
+
+```kotlin
+MediaComposerActivity.intent(context, uris, showCaption = false)
+CameraActivity.intent(context, showCaption = false)
+// Editor tunggal: extra EXTRA_SHOW_CAPTION = false pada ImageEditorActivity / VideoEditorActivity
+```
+
 Dalam mode daftar, composer menerima hingga 5 foto/video sekaligus. Media digeser kiri-kanan dan masing-masing diedit terpisah. Deretan thumbnail di bawah dipakai untuk berpindah, menghapus (×), atau menambah media (+). Keterangan dipakai bersama untuk semua media.
 
 ```kotlin
@@ -211,12 +251,13 @@ Urutan hasil sama dengan urutan media. Media yang tidak diedit dikembalikan deng
 
 `CameraActivity` adalah kamera layar penuh (potret, preview 9:16):
 
-- **Rekam bersegmen**: ketuk rana untuk mulai/berhenti, atau tahan selama merekam (geser jari ke atas saat menahan untuk zoom). Progress bar menandai tiap klip; klip terakhir bisa dihapus. Durasi 15 atau 60 detik, atau mode Foto.
+- **Rekam bersegmen**: ketuk rana untuk mulai/berhenti, atau tahan selama merekam (geser jari ke atas saat menahan untuk zoom). Progress bar menandai tiap klip; klip terakhir bisa dihapus. Pilihan mode: 15d, 1m (default), 30d, atau Foto.
 - **Kecepatan** 0.3x, 0.5x, 1x, 2x, 3x per klip. Klip digabung (dan kecepatannya diterapkan) saat menekan Selesai.
 - **Filter real-time** (GPU) yang terlihat di preview dan ikut terekam: filter bawaan plus filter LUT `.cube` dari `MediaComposer.configure(videoFilters = …)`. Geser kiri/kanan di preview untuk ganti filter.
 - **Halus**: penghalus kulit sederhana.
 - **Kontrol kamera**: balik depan/belakang (juga ketuk 2× di preview), flash (senter di kamera belakang, layar putih di kamera depan), cubit untuk zoom, ketuk untuk fokus, timer 3/10 detik, grid.
-- **Galeri**: pilih hingga 5 foto/video sekaligus.
+- **Foto beruntun**: di mode Foto, tiap jepretan ditampung dulu sampai batas `maxItems`. Foto tampil sebagai tumpukan kartu miring (menggantikan tombol galeri) dengan jumlahnya; ketuk tumpukan untuk membuka deretan foto (hapus dengan ×, jumlah mis. `2/5`). Tombol Selesai membuka semuanya di editor; saat batas tercapai editor terbuka otomatis. Dengan `maxItems = 1`, foto langsung dibuka di editor.
+- **Galeri**: pilih hingga `maxItems` foto/video sekaligus (default 5).
 
 Hasil foto/video langsung dibuka di `MediaComposerActivity`. Kembali dari editor = kembali ke kamera (klip tetap ada). Setelah dikirim, `CameraActivity` selesai dengan hasil yang **sama persis** dengan editor gabungan (`EXTRA_RESULT_URIS`, `EXTRA_RESULT_TYPES`, `EXTRA_CAPTION`, `clipData`, `data`).
 

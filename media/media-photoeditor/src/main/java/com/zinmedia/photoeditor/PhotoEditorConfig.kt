@@ -23,6 +23,16 @@ public object PhotoEditorConfig {
     /** Filter foto yang ditampilkan, sesuai urutan. Kosong = fitur filter disembunyikan. */
     @Volatile
     public var filters: List<PhotoFilterOption> = PhotoFilterOption.Defaults
+
+    /**
+     * Warna utama (ARGB), mis. tombol kirim, tombol dialog, kursor. Default hijau.
+     * Ikon/teks di atasnya otomatis putih atau hitam sesuai terang warna ini.
+     */
+    @Volatile
+    public var accentColor: Int = DEFAULT_ACCENT_COLOR
+
+    /** Warna utama bawaan (hijau). */
+    public const val DEFAULT_ACCENT_COLOR: Int = 0xFF21C063.toInt()
 }
 
 /** Satu pilihan filter foto bawaan beserta labelnya. */
@@ -54,9 +64,6 @@ public data class PhotoFilterOption(
             PhotoFilterOption(PhotoFilter.VIGNETTE, "Vignette"),
             PhotoFilterOption(PhotoFilter.CROSS_PROCESS, "Cross"),
             PhotoFilterOption(PhotoFilter.BLACK_WHITE, "Hitam Putih"),
-            PhotoFilterOption(PhotoFilter.FLIP_HORIZONTAL, "Balik H"),
-            PhotoFilterOption(PhotoFilter.FLIP_VERTICAL, "Balik V"),
-            PhotoFilterOption(PhotoFilter.ROTATE, "Putar"),
         )
     }
 }

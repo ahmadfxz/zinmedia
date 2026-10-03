@@ -124,6 +124,7 @@ public fun VideoEditorScreen(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     recipientLabel: String = "Status",
+    showCaption: Boolean = true,
     sessionKey: String? = null,
     active: Boolean = true,
     standalone: Boolean = true,
@@ -364,6 +365,7 @@ public fun VideoEditorScreen(
                             caption = caption,
                             onCaptionChange = { caption = it },
                             recipientLabel = recipientLabel,
+                            showCaption = showCaption,
                             sendEnabled = !exporting,
                             onSend = {
                                 vm.exportVideo(

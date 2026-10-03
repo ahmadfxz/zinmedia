@@ -23,13 +23,20 @@ public object MediaComposer {
      * @param emojis emoji tray; `null` = pakai daftar bawaan.
      * @param photoFilters filter foto bawaan yang ditampilkan; `null` = semua.
      * @param videoFilters filter LUT video. Kosong = filter video disembunyikan.
+     * @param accentColor warna utama (ARGB) untuk semua editor & kamera, mis. tombol kirim dan
+     *   tombol dialog; `null` = tidak diubah (default hijau).
      */
     public fun configure(
         stickers: List<String> = emptyList(),
         emojis: List<String>? = null,
         photoFilters: List<PhotoFilterOption>? = null,
         videoFilters: List<VideoFilterOption> = emptyList(),
+        accentColor: Int? = null,
     ) {
+        if (accentColor != null) {
+            PhotoEditorConfig.accentColor = accentColor
+            VideoEditorConfig.accentColor = accentColor
+        }
         PhotoEditorConfig.stickers = stickers
         VideoEditorConfig.stickers = stickers
         if (emojis != null) {

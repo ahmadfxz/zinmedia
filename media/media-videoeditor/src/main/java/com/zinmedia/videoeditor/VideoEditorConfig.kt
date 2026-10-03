@@ -17,6 +17,16 @@ public object VideoEditorConfig {
     /** Filter warna (LUT `.cube`), sesuai urutan. Kosong = fitur filter disembunyikan. */
     @Volatile
     public var filters: List<VideoFilterOption> = emptyList()
+
+    /**
+     * Warna utama (ARGB), mis. tombol kirim, tombol dialog, kursor. Default hijau.
+     * Ikon/teks di atasnya otomatis putih atau hitam sesuai terang warna ini.
+     */
+    @Volatile
+    public var accentColor: Int = DEFAULT_ACCENT_COLOR
+
+    /** Warna utama bawaan (hijau). */
+    public const val DEFAULT_ACCENT_COLOR: Int = 0xFF21C063.toInt()
 }
 
 /**

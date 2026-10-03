@@ -59,6 +59,7 @@ public class VideoEditorActivity : ComponentActivity() {
                     VideoEditorScreen(
                         videoUri = inputUri,
                         recipientLabel = intent.getStringExtra(EXTRA_RECIPIENT_LABEL) ?: getString(R.string.zm_recipient_default),
+                        showCaption = intent.getBooleanExtra(EXTRA_SHOW_CAPTION, true),
                         onExportFinished = { finalUri, keterangan ->
                             val result = Intent().apply {
                                 data = finalUri
@@ -99,5 +100,8 @@ public class VideoEditorActivity : ComponentActivity() {
 
         /** Label penerima di kiri tombol kirim, mis. "Status (Kontak)". Default: "Status". */
         public const val EXTRA_RECIPIENT_LABEL: String = "com.zinmedia.extra.RECIPIENT_LABEL"
+
+        /** Input: `false` = tanpa kolom keterangan (hasil [EXTRA_CAPTION] kosong). Default `true`. */
+        public const val EXTRA_SHOW_CAPTION: String = "com.zinmedia.extra.SHOW_CAPTION"
     }
 }

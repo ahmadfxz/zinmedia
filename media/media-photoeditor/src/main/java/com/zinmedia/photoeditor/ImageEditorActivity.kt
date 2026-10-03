@@ -52,6 +52,7 @@ public class ImageEditorActivity : ComponentActivity() {
             pinchTextScalable = intent.getBooleanExtra(PINCH_TEXT_SCALABLE_INTENT_KEY, true),
         )
         val recipientLabel = intent.getStringExtra(EXTRA_RECIPIENT_LABEL) ?: getString(R.string.zm_recipient_default)
+        val showCaption = intent.getBooleanExtra(EXTRA_SHOW_CAPTION, true)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = handleBack()
@@ -74,6 +75,7 @@ public class ImageEditorActivity : ComponentActivity() {
                             caption = caption,
                             onCaptionChange = { caption = it },
                             recipientLabel = recipientLabel,
+                            showCaption = showCaption,
                             sendEnabled = state.isLoaded && !sending,
                             onSend = ::publish,
                         )
@@ -133,6 +135,10 @@ public class ImageEditorActivity : ComponentActivity() {
 
         /** Label penerima di kiri tombol kirim, mis. "Status (Kontak)". Default: "Status". */
         public const val EXTRA_RECIPIENT_LABEL: String = "com.zinmedia.extra.RECIPIENT_LABEL"
+
+        /** Input: `false` = tanpa kolom keterangan (hasil [EXTRA_CAPTION] kosong). Default `true`. */
+        public const val EXTRA_SHOW_CAPTION: String = "com.zinmedia.extra.SHOW_CAPTION"
+
         private const val TAG = "ImageEditorActivity"
     }
 }

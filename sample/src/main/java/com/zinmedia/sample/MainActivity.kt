@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import com.zinmedia.camera.CameraActivity
+import com.zinmedia.composer.AllowedMedia
 import com.zinmedia.composer.MediaComposer
 import com.zinmedia.composer.MediaComposerActivity
 import com.zinmedia.photoeditor.ImageEditorActivity
@@ -26,6 +27,8 @@ import java.io.File
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open video
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open mixed
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open single
+ *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open nocaption
+ *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open videoonly   # atau: photoonly
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open video_rotated
  */
 class MainActivity : ComponentActivity() {
@@ -70,6 +73,8 @@ class MainActivity : ComponentActivity() {
         // Konten editor ditentukan aplikasi. Di aplikasi sungguhan, panggil di Application.onCreate().
         MediaComposer.configure(
             stickers = listOf("heart", "star", "wow").map { "file:///android_asset/stickers/$it.png" },
+            // Warna utama milik aplikasi (tombol kirim, dialog, dll).
+            accentColor = 0xFF1E88E5.toInt(),
         )
 
         resultView = ResultView(this)
@@ -119,6 +124,12 @@ class MainActivity : ComponentActivity() {
             editorLauncher.launch(Intent(this, CameraActivity::class.java))
             return
         }
+        if (type == "videoonly" || type == "photoonly") {
+            // Kamera & editor hanya untuk satu jenis media.
+            val allowed = if (type == "videoonly") AllowedMedia.Video else AllowedMedia.Image
+            editorLauncher.launch(CameraActivity.intent(this, allowedMedia = allowed))
+            return
+        }
         if (type == "mixed") {
             openComposer(listOf(sampleUri("sample.jpg"), sampleUri("sample.mp4"), sampleUri("sample2.jpg")))
             return
@@ -126,6 +137,11 @@ class MainActivity : ComponentActivity() {
         if (type == "single") {
             // Mode satu media: tanpa deretan thumbnail & tombol tambah.
             editorLauncher.launch(MediaComposerActivity.intent(this, listOf(sampleUri("sample.jpg")), maxItems = 1))
+            return
+        }
+        if (type == "nocaption") {
+            // Tanpa kolom keterangan.
+            editorLauncher.launch(MediaComposerActivity.intent(this, listOf(sampleUri("sample.jpg")), showCaption = false))
             return
         }
         if (type == "photos") {

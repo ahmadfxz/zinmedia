@@ -1,5 +1,7 @@
 package com.zinmedia.camera.ui
 
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.runtime.produceState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -55,6 +57,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -75,12 +78,18 @@ import com.zinmedia.camera.CameraState
 import com.zinmedia.camera.CaptureMode
 import com.zinmedia.camera.R
 import com.zinmedia.camera.Speeds
+import com.zinmedia.videoeditor.VideoEditorConfig
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.roundToInt
 
+/** Merah rekam (tombol rana & progress): menandakan sedang merekam, tidak ikut warna utama. */
 private val RecordRed = Color(0xFFFE2C55)
+
+/** Warna utama aplikasi ([VideoEditorConfig.accentColor]) dan warna ikon di atasnya. */
+private val Accent: Color get() = Color(VideoEditorConfig.accentColor)
+private val OnAccent: Color get() = if (Accent.luminance() > 0.6f) Color.Black else Color.White
 private val Highlight = Color(0xFFFFD54F)
 private val LabelStyle = TextStyle(
     color = Color.White,
@@ -96,6 +105,19 @@ internal fun CameraScreen(
     onGallery: () -> Unit,
 ) {
     var showDiscard by remember { mutableStateOf(false) }
+    // Deretan foto (untuk menghapus) dibuka dengan mengetuk tumpukan foto.
+    var photoTrayOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(state.photos.isEmpty()) { if (state.photos.isEmpty()) photoTrayOpen = false }
+    // Deretan tetap digambar selama animasi tutup berjalan.
+    var photoTrayShown by remember { mutableStateOf(false) }
+    LaunchedEffect(photoTrayOpen) {
+        if (photoTrayOpen) {
+            photoTrayShown = true
+        } else {
+            delay(trayCloseDurationMs(state.photos.size))
+            photoTrayShown = false
+        }
+    }
     val session = state.session
 
     Box(
@@ -114,6 +136,8 @@ internal fun CameraScreen(
             PreviewWithGestures(state)
 
             if (state.grid) GridOverlay()
+
+            ShutterBlink(state.photoTakenCount)
 
             // Gradasi tipis agar ikon & teks putih tetap terbaca di latar terang.
             Box(
@@ -141,7 +165,7 @@ internal fun CameraScreen(
                         icon = R.drawable.zm_ic_camera_close,
                         label = null,
                         description = stringResource(R.string.zm_camera_close),
-                        onClick = { if (state.segments.isNotEmpty()) showDiscard = true else onClose() },
+                        onClick = { if (state.hasCaptures) showDiscard = true else onClose() },
                     )
                 }
             }
@@ -192,8 +216,10 @@ internal fun CameraScreen(
             AnimatedVisibility(visible = state.showSpeed && !state.isRecording && state.mode != CaptureMode.Photo) {
                 SpeedSelector(state)
             }
+            // Tanpa animasi wadah: tiap foto masuk/keluar sendiri-sendiri (animasi list).
+            if (photoTrayShown && state.photos.isNotEmpty()) PhotoTray(state, open = photoTrayOpen)
             Spacer(Modifier.height(12.dp))
-            CaptureRow(state, onGallery)
+            CaptureRow(state, onGallery, onPhotoStackClick = { photoTrayOpen = !photoTrayOpen })
             Spacer(Modifier.height(12.dp))
             ModeTabs(state)
         }
@@ -215,7 +241,7 @@ internal fun CameraScreen(
                     showDiscard = false
                     state.reset()
                     onClose()
-                }) { Text(stringResource(R.string.zm_camera_discard), color = RecordRed) }
+                }) { Text(stringResource(R.string.zm_camera_discard), color = Accent) }
             },
             dismissButton = {
                 TextButton(onClick = { showDiscard = false }) { Text(stringResource(R.string.zm_camera_cancel)) }
@@ -521,12 +547,13 @@ private fun SpeedSelector(state: CameraState) {
 }
 
 @Composable
-private fun CaptureRow(state: CameraState, onGallery: () -> Unit) {
+private fun CaptureRow(state: CameraState, onGallery: () -> Unit, onPhotoStackClick: () -> Unit) {
     Box(Modifier.fillMaxWidth().height(96.dp)) {
-        // Kiri: galeri (sebelum merekam) atau hapus klip terakhir.
+        // Kiri: galeri (sebelum mengambil apa pun), tumpukan foto, atau hapus klip terakhir.
         Box(Modifier.align(Alignment.CenterStart).padding(start = 40.dp)) {
             when {
                 state.isRecording -> Unit
+                state.photos.isNotEmpty() -> PhotoStack(state.photos, onClick = onPhotoStackClick)
                 state.segments.isNotEmpty() -> RoundIconButton(
                     icon = R.drawable.zm_ic_camera_backspace,
                     description = stringResource(R.string.zm_camera_delete_segment),
@@ -542,21 +569,21 @@ private fun CaptureRow(state: CameraState, onGallery: () -> Unit) {
 
         ShutterButton(state, Modifier.align(Alignment.Center))
 
-        // Kanan: selesai (bila sudah ada klip).
+        // Kanan: selesai (bila sudah ada klip atau foto).
         val doneDescription = stringResource(R.string.zm_camera_done)
-        if (state.segments.isNotEmpty() && !state.isRecording) {
+        if (state.hasCaptures && !state.isRecording) {
             Box(
                 Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 40.dp)
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(RecordRed)
+                    .background(Accent)
                     .clickable(role = Role.Button, onClick = state::finish)
                     .semantics { contentDescription = doneDescription },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(R.drawable.zm_ic_camera_check), null, tint = Color.White, modifier = Modifier.size(26.dp))
+                Icon(painterResource(R.drawable.zm_ic_camera_check), null, tint = OnAccent, modifier = Modifier.size(26.dp))
             }
         }
     }
@@ -644,16 +671,20 @@ private const val HoldThresholdMs = 400L
 
 @Composable
 private fun ModeTabs(state: CameraState) {
-    if (state.isBusy || state.segments.isNotEmpty()) {
+    // Tab disembunyikan saat merekam, setelah ada klip, atau bila hanya ada satu mode.
+    if (state.isBusy || state.hasCaptures || state.modes.size < 2) {
         Spacer(Modifier.height(24.dp))
         return
     }
     Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-        listOf(
-            CaptureMode.Video60 to stringResource(R.string.zm_camera_mode_60),
+        // Urutan tab mengikuti state.modes: 15d, 1m, 30d, Foto.
+        val labels = mapOf(
             CaptureMode.Video15 to stringResource(R.string.zm_camera_mode_15),
+            CaptureMode.Video60 to stringResource(R.string.zm_camera_mode_60),
+            CaptureMode.Video30 to stringResource(R.string.zm_camera_mode_30),
             CaptureMode.Photo to stringResource(R.string.zm_camera_mode_photo),
-        ).forEach { (mode, label) ->
+        )
+        state.modes.map { it to labels.getValue(it) }.forEach { (mode, label) ->
             val selected = state.mode == mode
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
@@ -687,7 +718,7 @@ private fun ProcessingOverlay(progress: Float) {
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = RecordRed)
+            CircularProgressIndicator(color = Accent)
             Spacer(Modifier.height(12.dp))
             Text(
                 text = stringResource(R.string.zm_camera_processing) +
@@ -698,3 +729,183 @@ private fun ProcessingOverlay(progress: Float) {
         }
     }
 }
+
+/** Kedip gelap singkat setiap kali foto diambil. */
+@Composable
+private fun ShutterBlink(photoTakenCount: Int) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(photoTakenCount) {
+        if (photoTakenCount == 0) return@LaunchedEffect
+        visible = true
+        delay(120)
+        visible = false
+    }
+    val alpha by animateFloatAsState(if (visible) 0.6f else 0f, label = "blink")
+    if (alpha > 0f) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = alpha)))
+}
+
+/** Foto yang sudah diambil (mode Foto, lebih dari satu): pratinjau kecil, hapus (×), dan jumlah. */
+@Composable
+private fun PhotoTray(state: CameraState, open: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+    ) {
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f),
+        ) {
+            itemsIndexed(state.photos, key = { _, file -> file.path }) { index, file ->
+                // Buka: masuk berurutan dari kiri (arah tumpukan foto). Tutup: keluar berurutan dari
+                // kanan kembali ke tumpukan. Hapus/geser memakai animasi item.
+                val appear = remember { androidx.compose.animation.core.Animatable(0f) }
+                LaunchedEffect(open) {
+                    if (open) {
+                        delay(index * TrayStaggerInMs)
+                        appear.animateTo(1f, androidx.compose.animation.core.tween(TrayItemInMs))
+                    } else {
+                        delay((state.photos.size - 1 - index) * TrayStaggerOutMs)
+                        appear.animateTo(0f, androidx.compose.animation.core.tween(TrayItemOutMs))
+                    }
+                }
+                val slide = with(LocalDensity.current) { 24.dp.toPx() }
+                Box(
+                    Modifier
+                        .animateItem()
+                        .graphicsLayer {
+                            alpha = appear.value
+                            translationX = (1f - appear.value) * -slide
+                        }
+                        .size(56.dp)
+                ) {
+                    PhotoThumbnail(file, Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)))
+                    val removeLabel = stringResource(R.string.zm_camera_remove_photo)
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 4.dp, y = (-4).dp)
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.7f))
+                            .clickable(role = Role.Button) { state.removePhoto(index) }
+                            .semantics { contentDescription = removeLabel },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(painterResource(R.drawable.zm_ic_camera_close), null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+        }
+        // Jumlah foto ikut muncul/hilang bersama deretan.
+        val counter = remember { androidx.compose.animation.core.Animatable(0f) }
+        LaunchedEffect(open) {
+            if (open) {
+                counter.animateTo(1f, androidx.compose.animation.core.tween(TrayItemInMs))
+            } else {
+                counter.animateTo(0f, androidx.compose.animation.core.tween(TrayItemOutMs))
+            }
+        }
+        Text(
+            text = stringResource(R.string.zm_camera_photo_count, state.photos.size, state.photoLimit),
+            style = LabelStyle.copy(fontSize = 13.sp),
+            modifier = Modifier
+                .padding(start = 8.dp)
+                .graphicsLayer { alpha = counter.value },
+        )
+    }
+}
+
+/** Pratinjau kecil dari file JPEG hasil kamera (didekode kecil di luar thread UI). */
+@Composable
+private fun PhotoThumbnail(file: java.io.File, modifier: Modifier = Modifier) {
+    val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, file) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val options = android.graphics.BitmapFactory.Options().apply { inSampleSize = 8 }
+            android.graphics.BitmapFactory.decodeFile(file.path, options)?.asImageBitmap()
+        }
+    }
+    Box(modifier.background(Color.DarkGray)) {
+        bitmap?.let {
+            androidx.compose.foundation.Image(
+                bitmap = it,
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/**
+ * Foto yang sudah diambil, ditumpuk seperti kartu yang sedikit miring (acak tapi tetap per foto),
+ * dengan jumlah foto. Ketuk untuk membuka/menutup deretan foto.
+ */
+@Composable
+private fun PhotoStack(photos: List<java.io.File>, onClick: () -> Unit) {
+    val description = stringResource(R.string.zm_camera_photo_count, photos.size, photos.size)
+    // Kartu teratas "masuk" dengan sedikit memantul setiap ada foto baru.
+    val pop = remember { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(photos.size) {
+        pop.snapTo(1.25f)
+        pop.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.45f))
+    }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(56.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
+    ) {
+        val firstVisible = (photos.size - 3).coerceAtLeast(0)
+        val visible = photos.subList(firstVisible, photos.size)
+        visible.forEachIndexed { index, file ->
+            val isTop = index == visible.lastIndex
+            PhotoThumbnail(
+                file = file,
+                modifier = Modifier
+                    .size(width = 40.dp, height = 52.dp)
+                    .graphicsLayer {
+                        rotationZ = cardTilt(file, firstVisible + index)
+                        if (isTop) {
+                            scaleX = pop.value
+                            scaleY = pop.value
+                        }
+                    }
+                    .shadow(3.dp, RoundedCornerShape(6.dp))
+                    .border(1.5.dp, Color.White, RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(6.dp)),
+            )
+        }
+        // Jumlah foto.
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 6.dp, y = (-6).dp)
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(Accent),
+        ) {
+            Text(photos.size.toString(), color = OnAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/**
+ * Kemiringan kartu: bergantian kiri/kanan sesuai urutan foto, besarnya acak 4°–12° dari isi nama
+ * file, sehingga tetap sama untuk foto yang sama.
+ */
+private fun cardTilt(file: java.io.File, position: Int): Float {
+    val hash = file.name.hashCode()
+    val mixed = (hash xor (hash ushr 16)) * 0x45d9f3b
+    val magnitude = 4 + (mixed and 0x7fffffff) % 9
+    return (if (position % 2 == 0) -magnitude else magnitude).toFloat()
+}
+
+private const val TrayStaggerInMs = 45L
+private const val TrayItemInMs = 220
+private const val TrayStaggerOutMs = 35L
+private const val TrayItemOutMs = 160
+
+/** Lama animasi tutup deretan untuk [count] foto (sampai foto terakhir selesai keluar). */
+private fun trayCloseDurationMs(count: Int): Long = (count - 1).coerceAtLeast(0) * TrayStaggerOutMs + TrayItemOutMs + 20

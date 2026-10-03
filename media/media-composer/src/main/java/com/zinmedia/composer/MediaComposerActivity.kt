@@ -89,6 +89,10 @@ public class MediaComposerActivity : ComponentActivity() {
     private var showDiscardDialog by mutableStateOf(false)
     /** Batas jumlah media untuk sesi ini (1 = mode satu media). */
     private var maxItems = MAX_ITEMS
+    /** Kolom keterangan ditampilkan (dari [EXTRA_SHOW_CAPTION]). */
+    private var showCaption = true
+    /** Jenis media yang boleh dipakai (dari [EXTRA_ALLOWED_MEDIA]). */
+    private var allowedMedia = AllowedMedia.All
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,6 +104,8 @@ public class MediaComposerActivity : ComponentActivity() {
         }
 
         maxItems = intent.getIntExtra(EXTRA_MAX_ITEMS, MAX_ITEMS).coerceIn(1, MAX_ITEMS)
+        showCaption = intent.getBooleanExtra(EXTRA_SHOW_CAPTION, true)
+        allowedMedia = AllowedMedia.from(intent)
         addMedia(readInputUris())
         if (items.isEmpty()) {
             Log.e(TAG, "MediaComposerActivity dibuka tanpa foto/video")
@@ -194,7 +200,7 @@ public class MediaComposerActivity : ComponentActivity() {
                             onRemove = { index -> items.removeAt(index) },
                             onAdd = {
                                 pickMedia.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                                    PickVisualMediaRequest(allowedMedia.pickerType)
                                 )
                             },
                         )
@@ -203,6 +209,7 @@ public class MediaComposerActivity : ComponentActivity() {
                         caption = caption,
                         onCaptionChange = { caption = it },
                         recipientLabel = recipientLabel,
+                        showCaption = showCaption,
                         sendEnabled = !sending,
                         onSend = { send(pagerState::scrollToPage) { pagerState.settledPage } },
                     )
@@ -379,6 +386,8 @@ public class MediaComposerActivity : ComponentActivity() {
         for (uri in uris) {
             if (items.size >= maxItems) break
             val type = mediaTypeOf(uri) ?: continue
+            // Media yang jenisnya tidak diizinkan aplikasi dilewati.
+            if (!allowedMedia.accepts(type)) continue
             val photo = if (type == MediaType.Image) PhotoEditorState(this, uri) else null
             items += ComposerItem(uri, type, photo)
         }
@@ -397,6 +406,12 @@ public class MediaComposerActivity : ComponentActivity() {
         /** Input: batas jumlah media (`Int`, 1..[MAX_ITEMS], default [MAX_ITEMS]). `1` = mode satu media. */
         public const val EXTRA_MAX_ITEMS: String = "com.zinmedia.extra.MAX_ITEMS"
 
+        /** Input: `false` = tanpa kolom keterangan (hasil [EXTRA_CAPTION] kosong). Default `true`. */
+        public const val EXTRA_SHOW_CAPTION: String = "com.zinmedia.extra.SHOW_CAPTION"
+
+        /** Input: nama [AllowedMedia] (`"All"`, `"Image"`, `"Video"`); tidak diisi = semua jenis. */
+        public const val EXTRA_ALLOWED_MEDIA: String = "com.zinmedia.extra.ALLOWED_MEDIA"
+
         /**
          * Intent untuk membuka editor.
          *
@@ -404,6 +419,8 @@ public class MediaComposerActivity : ComponentActivity() {
          * @param maxItems batas jumlah media; `1` = mode satu media, lebih dari 1 = daftar
          *   (pengguna bisa menambah media hingga batas ini).
          * @param recipientLabel label penerima di kiri tombol kirim; `null` = "Status".
+         * @param showCaption `false` = tanpa kolom keterangan.
+         * @param allowedMedia foto saja, video saja, atau keduanya (default).
          */
         @JvmStatic
         @JvmOverloads
@@ -412,9 +429,13 @@ public class MediaComposerActivity : ComponentActivity() {
             uris: List<Uri>,
             maxItems: Int = MAX_ITEMS,
             recipientLabel: String? = null,
+            showCaption: Boolean = true,
+            allowedMedia: AllowedMedia = AllowedMedia.All,
         ): Intent = Intent(context, MediaComposerActivity::class.java)
             .putParcelableArrayListExtra(EXTRA_MEDIA_URIS, ArrayList(uris))
             .putExtra(EXTRA_MAX_ITEMS, maxItems.coerceIn(1, MAX_ITEMS))
+            .putExtra(EXTRA_SHOW_CAPTION, showCaption)
+            .putExtra(EXTRA_ALLOWED_MEDIA, allowedMedia.name)
             .apply { if (recipientLabel != null) putExtra(EXTRA_RECIPIENT_LABEL, recipientLabel) }
 
         /** Input: `ArrayList<Uri>` foto/video. */

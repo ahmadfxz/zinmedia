@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -46,7 +47,9 @@ import androidx.core.net.toUri
 import androidx.core.view.doOnLayout
 import androidx.lifecycle.lifecycleScope
 import com.zinmedia.camera.ui.CameraScreen
+import com.zinmedia.composer.AllowedMedia
 import com.zinmedia.composer.MediaComposerActivity
+import com.zinmedia.videoeditor.VideoEditorConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -58,7 +61,8 @@ import kotlin.coroutines.resume
  * [MediaComposerActivity.MAX_ITEMS] media). Hasilnya dibuka di [MediaComposerActivity]; kembali dari
  * editor = kembali ke kamera.
  *
- * Input opsional: [EXTRA_MAX_ITEMS] (1 = satu media), [EXTRA_RECIPIENT_LABEL]; buat dengan [intent]. Hasil (`RESULT_OK`) sama dengan [MediaComposerActivity]:
+ * Input opsional: [EXTRA_MAX_ITEMS] (1 = satu media), [EXTRA_ALLOWED_MEDIA], [EXTRA_SHOW_CAPTION], [EXTRA_RECIPIENT_LABEL];
+ * buat dengan [intent]. Hasil (`RESULT_OK`) sama dengan [MediaComposerActivity]:
  * `clipData`, [MediaComposerActivity.EXTRA_RESULT_URIS], [MediaComposerActivity.EXTRA_RESULT_TYPES],
  * `data` (media pertama), dan [MediaComposerActivity.EXTRA_CAPTION].
  */
@@ -87,6 +91,8 @@ public class CameraActivity : ComponentActivity() {
 
     /** Batas jumlah media (1 = satu media), dari [EXTRA_MAX_ITEMS]. */
     private var maxItems = MediaComposerActivity.MAX_ITEMS
+    /** Jenis media yang boleh dipakai, dari [EXTRA_ALLOWED_MEDIA]. */
+    private var allowedMedia = AllowedMedia.All
 
     /** Galeri: pilih satu media, atau beberapa sesuai [maxItems]. Didaftarkan di onCreate. */
     private lateinit var openGallery: () -> Unit
@@ -101,7 +107,14 @@ public class CameraActivity : ComponentActivity() {
 
         maxItems = intent.getIntExtra(EXTRA_MAX_ITEMS, MediaComposerActivity.MAX_ITEMS)
             .coerceIn(1, MediaComposerActivity.MAX_ITEMS)
-        val galleryRequest = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+        allowedMedia = AllowedMedia.from(intent)
+        val galleryRequest = PickVisualMediaRequest(
+            when (allowedMedia) {
+                AllowedMedia.All -> ActivityResultContracts.PickVisualMedia.ImageAndVideo
+                AllowedMedia.Image -> ActivityResultContracts.PickVisualMedia.ImageOnly
+                AllowedMedia.Video -> ActivityResultContracts.PickVisualMedia.VideoOnly
+            }
+        )
         openGallery = if (maxItems == 1) {
             val single = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
                 if (uri != null) openComposer(listOf(uri))
@@ -119,7 +132,7 @@ public class CameraActivity : ComponentActivity() {
         }
 
         cameraGranted = hasPermission(Manifest.permission.CAMERA)
-        if (!cameraGranted || !hasPermission(Manifest.permission.RECORD_AUDIO)) requestPermissions()
+        if (!cameraGranted || (needsAudio && !hasPermission(Manifest.permission.RECORD_AUDIO))) requestPermissions()
 
         setContent {
             if (cameraGranted) {
@@ -163,6 +176,8 @@ public class CameraActivity : ComponentActivity() {
                 scope = scope,
                 audioEnabled = { hasPermission(Manifest.permission.RECORD_AUDIO) },
                 onCaptured = ::openComposer,
+                allowedMedia = allowedMedia,
+                maxPhotos = maxItems,
             ).also { state = it }
         }
         LaunchedEffect(Unit) {
@@ -194,12 +209,22 @@ public class CameraActivity : ComponentActivity() {
                 uris = uris,
                 maxItems = maxItems,
                 recipientLabel = intent.getStringExtra(EXTRA_RECIPIENT_LABEL),
+                showCaption = intent.getBooleanExtra(EXTRA_SHOW_CAPTION, true),
+                allowedMedia = allowedMedia,
             )
         )
     }
 
+    /** Mikrofon hanya dibutuhkan bila video boleh direkam. */
+    private val needsAudio: Boolean get() = allowedMedia != AllowedMedia.Image
+
     private fun requestPermissions() {
-        permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
+        val permissions = if (needsAudio) {
+            arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+        } else {
+            arrayOf(Manifest.permission.CAMERA)
+        }
+        permissionLauncher.launch(permissions)
     }
 
     private fun hasPermission(permission: String): Boolean =
@@ -212,11 +237,19 @@ public class CameraActivity : ComponentActivity() {
         /** Input: batas jumlah media (1..[MediaComposerActivity.MAX_ITEMS]); `1` = satu media. */
         public const val EXTRA_MAX_ITEMS: String = MediaComposerActivity.EXTRA_MAX_ITEMS
 
+        /** Input: `false` = editor tanpa kolom keterangan. Default `true`. */
+        public const val EXTRA_SHOW_CAPTION: String = MediaComposerActivity.EXTRA_SHOW_CAPTION
+
+        /** Input: nama [AllowedMedia]; tidak diisi = foto & video. */
+        public const val EXTRA_ALLOWED_MEDIA: String = MediaComposerActivity.EXTRA_ALLOWED_MEDIA
+
         /**
          * Intent untuk membuka kamera.
          *
          * @param maxItems batas jumlah media di galeri & editor; `1` = satu media.
          * @param recipientLabel label penerima di editor; `null` = "Status".
+         * @param showCaption `false` = editor tanpa kolom keterangan.
+         * @param allowedMedia foto saja (mode Foto), video saja (mode 15d/1m/30d), atau keduanya (default).
          */
         @JvmStatic
         @JvmOverloads
@@ -224,8 +257,12 @@ public class CameraActivity : ComponentActivity() {
             context: Context,
             maxItems: Int = MediaComposerActivity.MAX_ITEMS,
             recipientLabel: String? = null,
+            showCaption: Boolean = true,
+            allowedMedia: AllowedMedia = AllowedMedia.All,
         ): Intent = Intent(context, CameraActivity::class.java)
             .putExtra(EXTRA_MAX_ITEMS, maxItems.coerceIn(1, MediaComposerActivity.MAX_ITEMS))
+            .putExtra(EXTRA_SHOW_CAPTION, showCaption)
+            .putExtra(EXTRA_ALLOWED_MEDIA, allowedMedia.name)
             .apply { if (recipientLabel != null) putExtra(EXTRA_RECIPIENT_LABEL, recipientLabel) }
     }
 }
@@ -258,7 +295,10 @@ private fun PermissionScreen(
         )
         Button(
             onClick = if (permanentlyDenied) onOpenSettings else onGrant,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFE2C55)),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(VideoEditorConfig.accentColor),
+                contentColor = if (Color(VideoEditorConfig.accentColor).luminance() > 0.6f) Color.Black else Color.White,
+            ),
         ) {
             Text(
                 stringResource(

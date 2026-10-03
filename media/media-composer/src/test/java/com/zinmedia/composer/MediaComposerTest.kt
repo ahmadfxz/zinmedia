@@ -20,7 +20,22 @@ class MediaComposerTest {
 
     @After
     fun reset() {
-        MediaComposer.configure(emojis = DefaultEmojis, photoFilters = PhotoFilterOption.Defaults)
+        MediaComposer.configure(
+            emojis = DefaultEmojis,
+            photoFilters = PhotoFilterOption.Defaults,
+            accentColor = PhotoEditorConfig.DEFAULT_ACCENT_COLOR,
+        )
+    }
+
+    @Test
+    fun configure_accentColor_appliesToPhotoAndVideo() {
+        MediaComposer.configure(accentColor = 0xFF1E88E5.toInt())
+        assertEquals(0xFF1E88E5.toInt(), PhotoEditorConfig.accentColor)
+        assertEquals(0xFF1E88E5.toInt(), VideoEditorConfig.accentColor)
+
+        // null = tidak diubah.
+        MediaComposer.configure(stickers = listOf("s"))
+        assertEquals(0xFF1E88E5.toInt(), PhotoEditorConfig.accentColor)
     }
 
     @Test
@@ -57,5 +72,26 @@ class MediaComposerTest {
         @Suppress("DEPRECATION")
         assertEquals(uris, list.getParcelableArrayListExtra<Uri>(MediaComposerActivity.EXTRA_MEDIA_URIS))
         assertNull(list.getStringExtra(MediaComposerActivity.EXTRA_RECIPIENT_LABEL))
+        assertEquals(true, list.getBooleanExtra(MediaComposerActivity.EXTRA_SHOW_CAPTION, false))
+
+        val noCaption = MediaComposerActivity.intent(context, uris, showCaption = false)
+        assertEquals(false, noCaption.getBooleanExtra(MediaComposerActivity.EXTRA_SHOW_CAPTION, true))
+    }
+
+    @Test
+    fun allowedMedia_defaultsToAllAndFiltersTypes() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val uris = listOf(Uri.fromFile(File("/tmp/a.jpg")))
+        assertEquals(AllowedMedia.All, AllowedMedia.from(MediaComposerActivity.intent(context, uris)))
+        assertEquals(AllowedMedia.All, AllowedMedia.from(android.content.Intent()))
+        assertEquals(
+            AllowedMedia.Video,
+            AllowedMedia.from(MediaComposerActivity.intent(context, uris, allowedMedia = AllowedMedia.Video)),
+        )
+
+        assertEquals(true, AllowedMedia.Video.accepts(MediaType.Video))
+        assertEquals(false, AllowedMedia.Video.accepts(MediaType.Image))
+        assertEquals(false, AllowedMedia.Image.accepts(MediaType.Video))
+        assertEquals(true, AllowedMedia.All.accepts(MediaType.Image))
     }
 }

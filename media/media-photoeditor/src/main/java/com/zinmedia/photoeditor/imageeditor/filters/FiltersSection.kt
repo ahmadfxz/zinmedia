@@ -68,9 +68,6 @@ private val FilterThumbnails: Map<PhotoFilter, String> = mapOf(
     PhotoFilter.VIGNETTE to "filters/vignette.webp",
     PhotoFilter.CROSS_PROCESS to "filters/cross_process.webp",
     PhotoFilter.BLACK_WHITE to "filters/b_n_w.webp",
-    PhotoFilter.FLIP_HORIZONTAL to "filters/flip_horizental.webp",
-    PhotoFilter.FLIP_VERTICAL to "filters/flip_vertical.webp",
-    PhotoFilter.ROTATE to "filters/rotate.webp",
 )
 
 /** Strip filter horizontal: thumbnail + nama, filter aktif diberi bingkai putih. */

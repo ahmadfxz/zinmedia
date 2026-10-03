@@ -197,14 +197,6 @@ internal class ImageFilterView @JvmOverloads constructor(
                         mEffect = createEffect(EffectFactory.EFFECT_FISHEYE)
                         mEffect?.setParameter("scale", .5f)
                     }
-                    PhotoFilter.FLIP_HORIZONTAL -> {
-                        mEffect = createEffect(EffectFactory.EFFECT_FLIP)
-                        mEffect?.setParameter("horizontal", true)
-                    }
-                    PhotoFilter.FLIP_VERTICAL -> {
-                        mEffect = createEffect(EffectFactory.EFFECT_FLIP)
-                        mEffect?.setParameter("vertical", true)
-                    }
                     PhotoFilter.GRAIN -> {
                         mEffect = createEffect(EffectFactory.EFFECT_GRAIN)
                         mEffect?.setParameter("strength", 1.0f)
@@ -218,10 +210,6 @@ internal class ImageFilterView @JvmOverloads constructor(
                     PhotoFilter.NONE -> {}
                     PhotoFilter.POSTERIZE -> mEffect =
                         createEffect(EffectFactory.EFFECT_POSTERIZE)
-                    PhotoFilter.ROTATE -> {
-                        mEffect = createEffect(EffectFactory.EFFECT_ROTATE)
-                        mEffect?.setParameter("angle", 180)
-                    }
                     PhotoFilter.SATURATE -> {
                         mEffect = createEffect(EffectFactory.EFFECT_SATURATE)
                         mEffect?.setParameter("scale", .5f)
