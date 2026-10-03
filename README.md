@@ -8,7 +8,7 @@ Library Android (Jetpack Compose) untuk mengedit foto dan video sebelum diunggah
 | `media-photoeditor` | Editor foto: `com.zinmedia.photoeditor.ImageEditorActivity` |
 | `media-videoeditor` | Editor video: `com.zinmedia.videoeditor.VideoEditorActivity` (ekspor lewat Media3 Transformer) |
 
-Persyaratan: `minSdk` 23, `compileSdk` 37 atau lebih baru, Kotlin 2.3 atau lebih baru.
+Persyaratan: `minSdk` 23, `compileSdk` 36 atau lebih baru, Kotlin 2.3 atau lebih baru.
 
 ## Instalasi
 
@@ -30,7 +30,7 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "4.1.1"
+zinmedia = "4.1.2"
 
 [libraries]
 zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }

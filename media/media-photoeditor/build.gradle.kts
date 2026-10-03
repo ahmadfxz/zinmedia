@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.zinmedia.photoeditor"
-    compileSdk = 37
+    compileSdk = 36
     // Semua resource library berawalan zm_ agar tidak bentrok dengan resource aplikasi.
     resourcePrefix = "zm_"
 
