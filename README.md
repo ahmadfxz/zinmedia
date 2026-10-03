@@ -4,6 +4,7 @@ Library Android (Jetpack Compose) untuk mengedit foto dan video sebelum diunggah
 
 | Modul | Isi |
 |---|---|
+| `media-camera` | Kamera foto & video ala aplikasi video pendek: filter & efek real-time, penghalus kulit, rekam bersegmen, kecepatan, timer, flash, zoom, galeri (pilih banyak): `com.zinmedia.camera.CameraActivity`. Hasilnya dibuka di editor gabungan. Sudah termasuk semua modul di bawah. |
 | `media-composer` | Editor beberapa foto & video sekaligus (maks. 5, geser antar media): `com.zinmedia.composer.MediaComposerActivity`. Sudah termasuk dua modul di bawah. |
 | `media-photoeditor` | Editor foto: `com.zinmedia.photoeditor.ImageEditorActivity` |
 | `media-videoeditor` | Editor video: `com.zinmedia.videoeditor.VideoEditorActivity` (ekspor lewat Media3 Transformer) |
@@ -37,6 +38,8 @@ zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoedito
 zinmedia-videoeditor = { module = "com.github.ahmadfxz.zinmedia:media-videoeditor", version.ref = "zinmedia" }
 # atau, untuk editor gabungan (sudah termasuk foto & video):
 zinmedia-composer = { module = "com.github.ahmadfxz.zinmedia:media-composer", version.ref = "zinmedia" }
+# atau, kamera + galeri + editor gabungan (semuanya):
+zinmedia-camera = { module = "com.github.ahmadfxz.zinmedia:media-camera", version.ref = "zinmedia" }
 ```
 
 **app/build.gradle.kts**
@@ -164,7 +167,7 @@ Modul `sample` (tidak ikut dipublish) membuka editor dengan foto/video contoh at
 
 ```bash
 ./gradlew :sample:installDebug
-adb shell am start -n com.zinmedia.sample/.MainActivity --es open photo   # atau: video
+adb shell am start -n com.zinmedia.sample/.MainActivity --es open camera  # atau: photo, video, mixed
 ```
 
 ## Editor gabungan (beberapa media)
@@ -192,6 +195,25 @@ composerLauncher.launch(
 ```
 
 Urutan hasil sama dengan urutan media. Media yang tidak diedit dikembalikan dengan URI aslinya, tanpa diproses ulang. Hasil juga tersedia lewat `clipData`.
+
+## Kamera
+
+`CameraActivity` adalah kamera layar penuh (potret, preview 9:16):
+
+- **Rekam bersegmen**: ketuk rana untuk mulai/berhenti, atau tahan selama merekam (geser jari ke atas saat menahan untuk zoom). Progress bar menandai tiap klip; klip terakhir bisa dihapus. Durasi 15 atau 60 detik, atau mode Foto.
+- **Kecepatan** 0.3x, 0.5x, 1x, 2x, 3x per klip. Klip digabung (dan kecepatannya diterapkan) saat menekan Selesai.
+- **Filter real-time** (GPU) yang terlihat di preview dan ikut terekam: filter bawaan plus filter LUT `.cube` dari `MediaComposer.configure(videoFilters = …)`. Geser kiri/kanan di preview untuk ganti filter.
+- **Halus**: penghalus kulit sederhana.
+- **Kontrol kamera**: balik depan/belakang (juga ketuk 2× di preview), flash (senter di kamera belakang, layar putih di kamera depan), cubit untuk zoom, ketuk untuk fokus, timer 3/10 detik, grid.
+- **Galeri**: pilih hingga 5 foto/video sekaligus.
+
+Hasil foto/video langsung dibuka di `MediaComposerActivity`. Kembali dari editor = kembali ke kamera (klip tetap ada). Setelah dikirim, `CameraActivity` selesai dengan hasil yang **sama persis** dengan editor gabungan (`EXTRA_RESULT_URIS`, `EXTRA_RESULT_TYPES`, `EXTRA_CAPTION`, `clipData`, `data`).
+
+```kotlin
+cameraLauncher.launch(Intent(context, CameraActivity::class.java))
+```
+
+Izin `CAMERA` dan `RECORD_AUDIO` sudah dideklarasikan library dan diminta oleh `CameraActivity`. Tanpa izin mikrofon, video direkam tanpa suara.
 
 ## Rilis versi baru
 

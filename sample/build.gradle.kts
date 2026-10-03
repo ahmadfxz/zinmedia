@@ -27,7 +27,7 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":media:media-composer"))
+    implementation(project(":media:media-camera"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.appcompat)
 }

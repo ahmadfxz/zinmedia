@@ -24,6 +24,7 @@ include(
     ":media:media-photoeditor",
     ":media:media-videoeditor",
     ":media:media-composer",
+    ":media:media-camera",
     // Aplikasi demo untuk mencoba editor; tidak dipublish.
     ":sample",
 )

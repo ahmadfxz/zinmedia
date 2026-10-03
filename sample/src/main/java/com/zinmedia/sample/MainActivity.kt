@@ -10,6 +10,7 @@ import android.widget.ScrollView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import com.zinmedia.camera.CameraActivity
 import com.zinmedia.composer.MediaComposer
 import com.zinmedia.composer.MediaComposerActivity
 import com.zinmedia.photoeditor.ImageEditorActivity
@@ -20,6 +21,7 @@ import java.io.File
  * Demo editor zinmedia.
  *
  * Buka langsung dengan media contoh lewat adb:
+ *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open camera
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open photo
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open video
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open mixed
@@ -74,6 +76,7 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(64, 64, 64, 64)
+            addView(button("Kamera") { openSample("camera") })
             addView(button("Foto contoh") { openSample("photo") })
             addView(button("Video contoh") { openSample("video") })
             addView(button("Gabungan contoh (2 foto + video)") { openSample("mixed") })
@@ -111,6 +114,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openSample(type: String) {
+        if (type == "camera") {
+            editorLauncher.launch(Intent(this, CameraActivity::class.java))
+            return
+        }
         if (type == "mixed") {
             openComposer(listOf(sampleUri("sample.jpg"), sampleUri("sample.mp4"), sampleUri("sample2.jpg")))
             return

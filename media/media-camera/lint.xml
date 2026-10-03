@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Library tidak mengatur android:supportsRtl; itu keputusan aplikasi (menghindari konflik manifest). -->
+    <issue id="RtlEnabled" severity="ignore" />
+    <!-- AGP 9 adalah migrasi mayor; dilakukan terpisah. -->
+    <issue id="AndroidGradlePluginVersion" severity="ignore" />
+</lint>

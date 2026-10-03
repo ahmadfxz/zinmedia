@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="zm_camera_close">Tutup kamera</string>
+    <string name="zm_camera_flip">Balik</string>
+    <string name="zm_camera_speed">Kecepatan</string>
+    <string name="zm_camera_filter">Filter</string>
+    <string name="zm_camera_beauty">Halus</string>
+    <string name="zm_camera_timer">Timer</string>
+    <string name="zm_camera_timer_seconds">%1$dd</string>
+    <string name="zm_camera_flash">Flash</string>
+    <string name="zm_camera_grid">Grid</string>
+    <string name="zm_camera_gallery">Galeri</string>
+    <string name="zm_camera_delete_segment">Hapus klip terakhir</string>
+    <string name="zm_camera_done">Selesai</string>
+    <string name="zm_camera_shutter">Ambil foto atau rekam</string>
+    <string name="zm_camera_mode_photo">Foto</string>
+    <string name="zm_camera_mode_15">15d</string>
+    <string name="zm_camera_mode_60">60d</string>
+    <string name="zm_camera_processing">Memproses video…</string>
+    <string name="zm_camera_permission_title">Izinkan akses kamera</string>
+    <string name="zm_camera_permission_body">Kamera dibutuhkan untuk mengambil foto dan merekam video.</string>
+    <string name="zm_camera_permission_grant">Izinkan</string>
+    <string name="zm_camera_permission_settings">Buka pengaturan</string>
+    <string name="zm_camera_hold_hint">Ketuk atau tahan untuk merekam</string>
+    <string name="zm_camera_discard_title">Buang rekaman?</string>
+    <string name="zm_camera_discard_body">Klip yang sudah direkam akan dihapus.</string>
+    <string name="zm_camera_discard">Buang</string>
+    <string name="zm_camera_cancel">Batal</string>
+</resources>
