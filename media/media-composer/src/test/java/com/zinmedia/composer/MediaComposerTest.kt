@@ -42,4 +42,20 @@ class MediaComposerTest {
         assertEquals(MediaType.Video, context.mediaTypeOf(Uri.fromFile(File("/tmp/a.mp4"))))
         assertNull(context.mediaTypeOf(Uri.fromFile(File("/tmp/a.txt"))))
     }
+
+    @Test
+    fun intent_carriesMediaAndClampedLimit() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val uris = listOf(Uri.fromFile(File("/tmp/a.jpg")), Uri.fromFile(File("/tmp/b.mp4")))
+
+        val single = MediaComposerActivity.intent(context, uris.take(1), maxItems = 1, recipientLabel = "Status (Kontak)")
+        assertEquals(1, single.getIntExtra(MediaComposerActivity.EXTRA_MAX_ITEMS, -1))
+        assertEquals("Status (Kontak)", single.getStringExtra(MediaComposerActivity.EXTRA_RECIPIENT_LABEL))
+
+        val list = MediaComposerActivity.intent(context, uris, maxItems = 99)
+        assertEquals(MediaComposerActivity.MAX_ITEMS, list.getIntExtra(MediaComposerActivity.EXTRA_MAX_ITEMS, -1))
+        @Suppress("DEPRECATION")
+        assertEquals(uris, list.getParcelableArrayListExtra<Uri>(MediaComposerActivity.EXTRA_MEDIA_URIS))
+        assertNull(list.getStringExtra(MediaComposerActivity.EXTRA_RECIPIENT_LABEL))
+    }
 }

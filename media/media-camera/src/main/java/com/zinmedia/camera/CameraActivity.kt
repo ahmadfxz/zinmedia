@@ -1,6 +1,7 @@
 package com.zinmedia.camera
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -57,7 +58,7 @@ import kotlin.coroutines.resume
  * [MediaComposerActivity.MAX_ITEMS] media). Hasilnya dibuka di [MediaComposerActivity]; kembali dari
  * editor = kembali ke kamera.
  *
- * Input opsional: [EXTRA_RECIPIENT_LABEL]. Hasil (`RESULT_OK`) sama dengan [MediaComposerActivity]:
+ * Input opsional: [EXTRA_MAX_ITEMS] (1 = satu media), [EXTRA_RECIPIENT_LABEL]; buat dengan [intent]. Hasil (`RESULT_OK`) sama dengan [MediaComposerActivity]:
  * `clipData`, [MediaComposerActivity.EXTRA_RESULT_URIS], [MediaComposerActivity.EXTRA_RESULT_TYPES],
  * `data` (media pertama), dan [MediaComposerActivity.EXTRA_CAPTION].
  */
@@ -84,10 +85,11 @@ public class CameraActivity : ComponentActivity() {
             // Dibatalkan: tetap di kamera (klip yang sudah direkam masih ada).
         }
 
-    private val galleryLauncher =
-        registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MediaComposerActivity.MAX_ITEMS)) { uris ->
-            if (uris.isNotEmpty()) openComposer(uris)
-        }
+    /** Batas jumlah media (1 = satu media), dari [EXTRA_MAX_ITEMS]. */
+    private var maxItems = MediaComposerActivity.MAX_ITEMS
+
+    /** Galeri: pilih satu media, atau beberapa sesuai [maxItems]. Didaftarkan di onCreate. */
+    private lateinit var openGallery: () -> Unit
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,6 +98,25 @@ public class CameraActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.Transparent.toArgb()),
         )
         lifecycleScope.launch(Dispatchers.IO) { deleteOldCameraFiles(applicationContext) }
+
+        maxItems = intent.getIntExtra(EXTRA_MAX_ITEMS, MediaComposerActivity.MAX_ITEMS)
+            .coerceIn(1, MediaComposerActivity.MAX_ITEMS)
+        val galleryRequest = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+        openGallery = if (maxItems == 1) {
+            val single = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
+                if (uri != null) openComposer(listOf(uri))
+            }
+            val launch: () -> Unit = { single.launch(galleryRequest) }
+            launch
+        } else {
+            val multiple = registerForActivityResult(
+                ActivityResultContracts.PickMultipleVisualMedia(maxItems)
+            ) { uris: List<Uri> ->
+                if (uris.isNotEmpty()) openComposer(uris)
+            }
+            val launch: () -> Unit = { multiple.launch(galleryRequest) }
+            launch
+        }
 
         cameraGranted = hasPermission(Manifest.permission.CAMERA)
         if (!cameraGranted || !hasPermission(Manifest.permission.RECORD_AUDIO)) requestPermissions()
@@ -162,20 +183,19 @@ public class CameraActivity : ComponentActivity() {
         CameraScreen(
             state = cameraState,
             onClose = ::finish,
-            onGallery = {
-                galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-            },
+            onGallery = { openGallery() },
         )
     }
 
     private fun openComposer(uris: List<Uri>) {
-        val intent = Intent(this, MediaComposerActivity::class.java)
-            .putParcelableArrayListExtra(MediaComposerActivity.EXTRA_MEDIA_URIS, ArrayList(uris))
-        // Label penerima dari pemanggil diteruskan ke editor.
-        this.intent.getStringExtra(EXTRA_RECIPIENT_LABEL)?.let {
-            intent.putExtra(MediaComposerActivity.EXTRA_RECIPIENT_LABEL, it)
-        }
-        composerLauncher.launch(intent)
+        composerLauncher.launch(
+            MediaComposerActivity.intent(
+                context = this,
+                uris = uris,
+                maxItems = maxItems,
+                recipientLabel = intent.getStringExtra(EXTRA_RECIPIENT_LABEL),
+            )
+        )
     }
 
     private fun requestPermissions() {
@@ -188,6 +208,25 @@ public class CameraActivity : ComponentActivity() {
     public companion object {
         /** Input: label penerima di editor, mis. "Status (Kontak)". */
         public const val EXTRA_RECIPIENT_LABEL: String = MediaComposerActivity.EXTRA_RECIPIENT_LABEL
+
+        /** Input: batas jumlah media (1..[MediaComposerActivity.MAX_ITEMS]); `1` = satu media. */
+        public const val EXTRA_MAX_ITEMS: String = MediaComposerActivity.EXTRA_MAX_ITEMS
+
+        /**
+         * Intent untuk membuka kamera.
+         *
+         * @param maxItems batas jumlah media di galeri & editor; `1` = satu media.
+         * @param recipientLabel label penerima di editor; `null` = "Status".
+         */
+        @JvmStatic
+        @JvmOverloads
+        public fun intent(
+            context: Context,
+            maxItems: Int = MediaComposerActivity.MAX_ITEMS,
+            recipientLabel: String? = null,
+        ): Intent = Intent(context, CameraActivity::class.java)
+            .putExtra(EXTRA_MAX_ITEMS, maxItems.coerceIn(1, MediaComposerActivity.MAX_ITEMS))
+            .apply { if (recipientLabel != null) putExtra(EXTRA_RECIPIENT_LABEL, recipientLabel) }
     }
 }
 

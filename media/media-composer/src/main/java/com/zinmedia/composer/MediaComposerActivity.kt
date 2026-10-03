@@ -1,5 +1,6 @@
 package com.zinmedia.composer
 
+import android.content.Context
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.res.stringResource
 import android.content.ClipData
@@ -71,10 +72,11 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Editor beberapa foto & video sekaligus (maks. [MAX_ITEMS]). Geser untuk berpindah media;
- * tiap media diedit terpisah, keterangan dipakai bersama.
+ * Editor foto & video: satu media, atau beberapa sekaligus (maks. [MAX_ITEMS]). Geser untuk
+ * berpindah media; tiap media diedit terpisah, keterangan dipakai bersama. Buat intent dengan [intent].
  *
- * Input: [EXTRA_MEDIA_URIS] (`ArrayList<Uri>`), atau `clipData` / `data`.
+ * Input: [EXTRA_MEDIA_URIS] (`ArrayList<Uri>`), atau `clipData` / `data`. [EXTRA_MAX_ITEMS] = batas
+ * jumlah media; `1` = mode satu media (tanpa deretan thumbnail & tombol tambah).
  * Hasil: `clipData` + [EXTRA_RESULT_URIS] berisi semua URI hasil (urutan sama dengan input),
  * [EXTRA_RESULT_TYPES] ("image"/"video" per item), `data` = media pertama, dan extra `keterangan`.
  */
@@ -85,6 +87,8 @@ public class MediaComposerActivity : ComponentActivity() {
     private var sending by mutableStateOf(false)
     private var sendingIndex by mutableIntStateOf(0)
     private var showDiscardDialog by mutableStateOf(false)
+    /** Batas jumlah media untuk sesi ini (1 = mode satu media). */
+    private var maxItems = MAX_ITEMS
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,6 +99,7 @@ public class MediaComposerActivity : ComponentActivity() {
             VideoEditorFileProvider.deleteOldOutputs(applicationContext)
         }
 
+        maxItems = intent.getIntExtra(EXTRA_MAX_ITEMS, MAX_ITEMS).coerceIn(1, MAX_ITEMS)
         addMedia(readInputUris())
         if (items.isEmpty()) {
             Log.e(TAG, "MediaComposerActivity dibuka tanpa foto/video")
@@ -131,8 +136,9 @@ public class MediaComposerActivity : ComponentActivity() {
         val activeItem = items.getOrNull(pagerState.currentPage)
         val toolActive = activeItem?.photo?.isToolActive == true || videoToolActive[activeItem?.id] == true
 
+        // Picker hanya dipakai bila boleh lebih dari satu media (PickMultiple butuh batas >= 2).
         val pickMedia = rememberLauncherForActivityResult(
-            ActivityResultContracts.PickMultipleVisualMedia(MAX_ITEMS)
+            ActivityResultContracts.PickMultipleVisualMedia(maxItems.coerceAtLeast(2))
         ) { uris ->
             val before = items.size
             addMedia(uris)
@@ -179,11 +185,11 @@ public class MediaComposerActivity : ComponentActivity() {
                         .fillMaxWidth()
                         .onSizeChanged { bottomBarHeight = with(density) { it.height.toDp() } },
                 ) {
-                    run {
+                    if (maxItems > 1) {
                         ThumbnailStrip(
                             items = items,
                             selected = pagerState.currentPage,
-                            canAdd = items.size < MAX_ITEMS && !sending,
+                            canAdd = items.size < maxItems && !sending,
                             onSelect = { scope.launch { pagerState.scrollToPage(it) } },
                             onRemove = { index -> items.removeAt(index) },
                             onAdd = {
@@ -371,7 +377,7 @@ public class MediaComposerActivity : ComponentActivity() {
 
     private fun addMedia(uris: List<Uri>) {
         for (uri in uris) {
-            if (items.size >= MAX_ITEMS) break
+            if (items.size >= maxItems) break
             val type = mediaTypeOf(uri) ?: continue
             val photo = if (type == MediaType.Image) PhotoEditorState(this, uri) else null
             items += ComposerItem(uri, type, photo)
@@ -387,6 +393,29 @@ public class MediaComposerActivity : ComponentActivity() {
 
         /** Maksimal media sekali kirim. */
         public const val MAX_ITEMS: Int = 5
+
+        /** Input: batas jumlah media (`Int`, 1..[MAX_ITEMS], default [MAX_ITEMS]). `1` = mode satu media. */
+        public const val EXTRA_MAX_ITEMS: String = "com.zinmedia.extra.MAX_ITEMS"
+
+        /**
+         * Intent untuk membuka editor.
+         *
+         * @param uris media awal (foto/video).
+         * @param maxItems batas jumlah media; `1` = mode satu media, lebih dari 1 = daftar
+         *   (pengguna bisa menambah media hingga batas ini).
+         * @param recipientLabel label penerima di kiri tombol kirim; `null` = "Status".
+         */
+        @JvmStatic
+        @JvmOverloads
+        public fun intent(
+            context: Context,
+            uris: List<Uri>,
+            maxItems: Int = MAX_ITEMS,
+            recipientLabel: String? = null,
+        ): Intent = Intent(context, MediaComposerActivity::class.java)
+            .putParcelableArrayListExtra(EXTRA_MEDIA_URIS, ArrayList(uris))
+            .putExtra(EXTRA_MAX_ITEMS, maxItems.coerceIn(1, MAX_ITEMS))
+            .apply { if (recipientLabel != null) putExtra(EXTRA_RECIPIENT_LABEL, recipientLabel) }
 
         /** Input: `ArrayList<Uri>` foto/video. */
         public const val EXTRA_MEDIA_URIS: String = "com.zinmedia.extra.MEDIA_URIS"

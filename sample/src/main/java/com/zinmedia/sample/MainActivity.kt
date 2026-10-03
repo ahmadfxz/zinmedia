@@ -25,6 +25,7 @@ import java.io.File
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open photo
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open video
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open mixed
+ *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open single
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open video_rotated
  */
 class MainActivity : ComponentActivity() {
@@ -120,6 +121,11 @@ class MainActivity : ComponentActivity() {
         }
         if (type == "mixed") {
             openComposer(listOf(sampleUri("sample.jpg"), sampleUri("sample.mp4"), sampleUri("sample2.jpg")))
+            return
+        }
+        if (type == "single") {
+            // Mode satu media: tanpa deretan thumbnail & tombol tambah.
+            editorLauncher.launch(MediaComposerActivity.intent(this, listOf(sampleUri("sample.jpg")), maxItems = 1))
             return
         }
         if (type == "photos") {
