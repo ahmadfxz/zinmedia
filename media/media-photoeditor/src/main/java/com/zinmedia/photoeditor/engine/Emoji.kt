@@ -21,7 +21,7 @@ internal class Emoji(
     context = mPhotoEditorView.context,
     graphicManager = graphicManager,
     viewType = ViewType.EMOJI,
-    layoutId = R.layout.view_photo_editor_text
+    layoutId = R.layout.zm_view_photo_editor_text
 ) {
     private var txtEmoji: TextView? = null
     fun buildView(emojiTypeface: Typeface?, emojiName: String?) {

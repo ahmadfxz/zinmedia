@@ -55,56 +55,22 @@ internal class PhotoEditorImpl @SuppressLint("ClickableViewAccessibility") const
         addToEditor(sticker)
     }
 
-    override fun addText(text: String, colorCodeTextView: Int) {
-        addText(null, text, colorCodeTextView)
-    }
-
-    override fun addText(textTypeface: Typeface?, text: String, colorCodeTextView: Int) {
-        val styleBuilder = TextStyleBuilder()
-        styleBuilder.withTextColor(colorCodeTextView)
-        if (textTypeface != null) {
-            styleBuilder.withTextFont(textTypeface)
-        }
-        addText(text, styleBuilder)
-    }
-
-    override fun addText(text: String, styleBuilder: TextStyleBuilder?) {
+    override fun addTextLayer(image: Bitmap, layer: Any) {
         drawingView.enableDrawing(false)
-        val multiTouchListener = getMultiTouchListener(isTextPinchScalable)
-        val textGraphic = Text(
-            photoEditorView,
-            multiTouchListener,
-            viewState,
-            mDefaultTextTypeface,
-            mGraphicManager
-        )
-        textGraphic.buildView(text, styleBuilder)
-        addToEditor(textGraphic)
+        val graphic = TextLayerGraphic(photoEditorView, getMultiTouchListener(isTextPinchScalable), viewState, mGraphicManager)
+        graphic.buildView(image, layer)
+        addToEditor(graphic)
     }
 
-    override fun editText(view: View, inputText: String, colorCode: Int) {
-        editText(view, null, inputText, colorCode)
+    override fun editTextLayer(view: View, image: Bitmap, layer: Any) {
+        if (!viewState.containsAddedView(view)) return
+        view.findViewById<ImageView>(R.id.imgPhotoEditorImage)?.setImageBitmap(image)
+        view.setTag(R.id.zm_tag_text_layer, layer)
+        mGraphicManager.updateView(view)
     }
 
-    override fun editText(view: View, textTypeface: Typeface?, inputText: String, colorCode: Int) {
-        val styleBuilder = TextStyleBuilder()
-        styleBuilder.withTextColor(colorCode)
-        if (textTypeface != null) {
-            styleBuilder.withTextFont(textTypeface)
-        }
-        editText(view, inputText, styleBuilder)
-    }
-
-    override fun editText(view: View, inputText: String, styleBuilder: TextStyleBuilder?) {
-        val inputTextView = view.findViewById<TextView>(R.id.tvPhotoEditorText)
-        if (inputTextView != null && viewState.containsAddedView(view) && !TextUtils.isEmpty(
-                inputText
-            )
-        ) {
-            inputTextView.text = inputText
-            styleBuilder?.applyStyle(inputTextView)
-            mGraphicManager.updateView(view)
-        }
+    override fun removeLayer(view: View) {
+        mGraphicManager.removeView(view)
     }
 
     override fun addEmoji(emojiName: String) {
@@ -212,16 +178,6 @@ internal class PhotoEditorImpl @SuppressLint("ClickableViewAccessibility") const
         photoEditorView.setFilterEffect(filterType)
     }
 
-//    @RequiresPermission(allOf = [Manifest.permission.WRITE_EXTERNAL_STORAGE])
-//    override suspend fun saveAsFile(
-//        imagePath: String,
-//        saveSettings: SaveSettings
-//    ): SaveFileResult = withContext(Dispatchers.Main) {
-//        photoEditorView.saveFilter()
-//        val photoSaverTask = PhotoSaverTask(photoEditorView, mBoxHelper, saveSettings)
-//        return@withContext photoSaverTask.saveImageAsFile(imagePath)
-//    }
-
     override suspend fun saveAsBitmap(
         saveSettings: SaveSettings
     ): Bitmap = withContext(Dispatchers.Main) {
@@ -229,25 +185,6 @@ internal class PhotoEditorImpl @SuppressLint("ClickableViewAccessibility") const
         val photoSaverTask = PhotoSaverTask(photoEditorView, mBoxHelper, saveSettings)
         return@withContext photoSaverTask.saveImageAsBitmap()
     }
-
-//    @RequiresPermission(allOf = [Manifest.permission.WRITE_EXTERNAL_STORAGE])
-//    override fun saveAsFile(
-//        imagePath: String,
-//        saveSettings: SaveSettings,
-//        onSaveListener: PhotoEditor.OnSaveListener
-//    ) {
-//        GlobalScope.launch(Dispatchers.Main) {
-//            when (val result = saveAsFile(imagePath, saveSettings)) {
-//                is SaveFileResult.Success -> onSaveListener.onSuccess(imagePath)
-//                is SaveFileResult.Failure -> onSaveListener.onFailure(result.exception)
-//            }
-//        }
-//    }
-
-//    @RequiresPermission(allOf = [Manifest.permission.WRITE_EXTERNAL_STORAGE])
-//    override fun saveAsFile(imagePath: String, onSaveListener: PhotoEditor.OnSaveListener) {
-//        saveAsFile(imagePath, SaveSettings.Builder().build(), onSaveListener)
-//    }
 
     override fun saveAsBitmap(saveSettings: SaveSettings, onSaveBitmap: OnSaveBitmap) {
         GlobalScope.launch(Dispatchers.Main) {
@@ -267,7 +204,8 @@ internal class PhotoEditorImpl @SuppressLint("ClickableViewAccessibility") const
     }
 
     override val isCacheEmpty: Boolean
-        get() = !isUndoAvailable && !isRedoAvailable
+        // Teks/stiker/emoji (viewState) maupun coretan (drawerViewState).
+        get() = viewState.addedViewsCount == 0 && drawerViewState.addedViewsCount == 0
 
     // region Shape
     override fun setShape(shapeBuilder: ShapeBuilder) {

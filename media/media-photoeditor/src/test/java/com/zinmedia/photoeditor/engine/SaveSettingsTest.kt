@@ -8,19 +8,8 @@ import org.junit.Test
 
 class SaveSettingsTest {
     @Test
-    fun testByDefaultTransparentAndClearViewFlagSettingIsEnabled() {
-        val saveSettings = SaveSettings.Builder().build()
-        TestCase.assertTrue(saveSettings.isClearViewsEnabled)
-        TestCase.assertTrue(saveSettings.isTransparencyEnabled)
-    }
-
-    @Test
-    fun testWhenTransparentSettingIsDisabled() {
-        val saveSettings = SaveSettings.Builder()
-            .setTransparencyEnabled(false)
-            .build()
-        assertFalse(saveSettings.isTransparencyEnabled)
-        TestCase.assertTrue(saveSettings.isClearViewsEnabled)
+    fun testByDefaultClearViewSettingIsEnabled() {
+        TestCase.assertTrue(SaveSettings.Builder().build().isClearViewsEnabled)
     }
 
     @Test
@@ -29,17 +18,6 @@ class SaveSettingsTest {
             .setClearViewsEnabled(false)
             .build()
         assertFalse(saveSettings.isClearViewsEnabled)
-        TestCase.assertTrue(saveSettings.isTransparencyEnabled)
-    }
-
-    @Test
-    fun testWhenBothTransparentClearViewAfterSaveSettingIsDisabled() {
-        val saveSettings = SaveSettings.Builder()
-            .setClearViewsEnabled(false)
-            .setTransparencyEnabled(false)
-            .build()
-        assertFalse(saveSettings.isClearViewsEnabled)
-        assertFalse(saveSettings.isTransparencyEnabled)
     }
 
     @Test

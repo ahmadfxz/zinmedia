@@ -8,29 +8,16 @@ import androidx.annotation.IntRange
  * @since 8/8/2018
  * Builder Class to apply multiple save options
  */
-class SaveSettings private constructor(builder: Builder) {
-    val isTransparencyEnabled: Boolean
-    val isClearViewsEnabled: Boolean
-    val compressFormat: CompressFormat
-    val compressQuality: Int
+internal class SaveSettings private constructor(builder: Builder) {
+    internal val isClearViewsEnabled: Boolean
+    internal val compressFormat: CompressFormat
+    internal val compressQuality: Int
 
-    class Builder {
-        @JvmField var isTransparencyEnabled = true
-        @JvmField var isClearViewsEnabled = true
-        @JvmField var compressFormat = CompressFormat.PNG
-        @JvmField var compressQuality = 100
+    internal class Builder {
+        @JvmField internal var isClearViewsEnabled = true
+        @JvmField internal var compressFormat = CompressFormat.PNG
+        @JvmField internal var compressQuality = 100
 
-        /**
-         * Define a flag to enable transparency while saving image
-         *
-         * @param transparencyEnabled true if enabled
-         * @return Builder
-         * @see BitmapUtil.removeTransparency
-         */
-        fun setTransparencyEnabled(transparencyEnabled: Boolean): Builder {
-            isTransparencyEnabled = transparencyEnabled
-            return this
-        }
 
         /**
          * Define a flag to clear the view after saving the image
@@ -38,7 +25,7 @@ class SaveSettings private constructor(builder: Builder) {
          * @param clearViewsEnabled true if you want to clear all the views on [PhotoEditorView]
          * @return Builder
          */
-        fun setClearViewsEnabled(clearViewsEnabled: Boolean): Builder {
+        internal fun setClearViewsEnabled(clearViewsEnabled: Boolean): Builder {
             isClearViewsEnabled = clearViewsEnabled
             return this
         }
@@ -49,7 +36,7 @@ class SaveSettings private constructor(builder: Builder) {
          * @param compressFormat JPEG, PNG or WEBP
          * @return Builder
          */
-        fun setCompressFormat(compressFormat: CompressFormat): Builder {
+        internal fun setCompressFormat(compressFormat: CompressFormat): Builder {
             this.compressFormat = compressFormat
             return this
         }
@@ -60,19 +47,18 @@ class SaveSettings private constructor(builder: Builder) {
          * @param compressQuality An integer from 0 to 100
          * @return Builder
          */
-        fun setCompressQuality(@IntRange(from = 0, to = 100) compressQuality: Int): Builder {
+        internal fun setCompressQuality(@IntRange(from = 0, to = 100) compressQuality: Int): Builder {
             this.compressQuality = compressQuality
             return this
         }
 
-        fun build(): SaveSettings {
+        internal fun build(): SaveSettings {
             return SaveSettings(this)
         }
     }
 
     init {
         isClearViewsEnabled = builder.isClearViewsEnabled
-        isTransparencyEnabled = builder.isTransparencyEnabled
         compressFormat = builder.compressFormat
         compressQuality = builder.compressQuality
     }

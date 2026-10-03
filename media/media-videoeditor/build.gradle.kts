@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.zinmedia.videoeditor"
-    compileSdk = 36
+    compileSdk = 37
+    // Semua resource library berawalan zm_ agar tidak bentrok dengan resource aplikasi.
+    resourcePrefix = "zm_"
 
     defaultConfig {
         minSdk = 23
@@ -18,14 +20,19 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-    kotlinOptions {
-        jvmTarget = "11"
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         compose = true
+    }
+}
+
+kotlin {
+    // API publik harus ditandai eksplisit; selain itu internal.
+    explicitApi()
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -52,6 +59,9 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    implementation(libs.coil.video)
+
+    testImplementation(libs.junit)
 }
 
 configurations.all {

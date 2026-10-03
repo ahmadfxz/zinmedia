@@ -13,16 +13,16 @@ import android.view.View
  * on client side
  *
  */
-interface OnPhotoEditorListener {
-    /**
-     * When user long press the existing text this event will trigger implying that user want to
-     * edit the current [android.widget.TextView]
-     *
-     * @param rootView  view on which the long press occurs
-     * @param text      current text set on the view
-     * @param colorCode current color value set on view
-     */
-    fun onEditTextChangeListener(rootView: View, text: String, colorCode: Int, bgColorCode: Int)
+internal interface OnPhotoEditorListener {
+
+    /** Lapisan teks diketuk dua kali; [layer] adalah data yang disimpan saat lapisan dibuat. */
+    fun onTextLayerClick(rootView: View, layer: Any?)
+
+    /** Lapisan [view] sedang diseret; posisi jari dalam koordinat layar. */
+    fun onLayerDrag(view: View, rawX: Float, rawY: Float)
+
+    /** Seret lapisan [view] selesai ([cancelled] bila gesture dibatalkan sistem). */
+    fun onLayerDragEnd(view: View, cancelled: Boolean)
 
     /**
      * This is a callback when user adds any view on the [PhotoEditorView] it can be

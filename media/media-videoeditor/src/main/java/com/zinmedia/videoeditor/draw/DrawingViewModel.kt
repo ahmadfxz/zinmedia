@@ -8,14 +8,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 
-enum class BrushStyle {
+internal enum class BrushStyle {
     Pen,
     Neon,
     Eraser
 }
 
 
-data class DrawingUiState(
+internal data class DrawingUiState(
     val isDrawingEnabled: Boolean = false,
     val canvasSize: Size = Size.Zero,
     val brushStyle: BrushStyle = BrushStyle.Pen,
@@ -25,9 +25,9 @@ data class DrawingUiState(
     val currentStroke: Float = 25f
 )
 
-class DrawingViewModel : ViewModel() {
+internal class DrawingViewModel : ViewModel() {
 
-    var uiState by mutableStateOf(DrawingUiState())
+    internal var uiState by mutableStateOf(DrawingUiState())
         private set
 
     // Helper setState
@@ -35,35 +35,35 @@ class DrawingViewModel : ViewModel() {
         uiState = uiState.transform()
     }
 
-    fun setDrawingEnabled(enabled: Boolean) = update {
+    internal fun setDrawingEnabled(enabled: Boolean) = update {
         copy(isDrawingEnabled = enabled)
     }
 
-    fun setCanvasSize(size: Size) = update {
+    internal fun setCanvasSize(size: Size) = update {
         copy(canvasSize = size)
     }
 
-    fun setBrushStyle(style: BrushStyle) = update {
+    internal fun setBrushStyle(style: BrushStyle) = update {
         copy(brushStyle = style)
     }
 
-    fun setColor(color: Color) = update {
+    internal fun setColor(color: Color) = update {
         copy(currentColor = color)
     }
 
-    fun setStroke(stroke: Float) = update {
+    internal fun setStroke(stroke: Float) = update {
         copy(currentStroke = stroke)
     }
 
-    fun startNewPath(point: Offset) = update {
+    internal fun startNewPath(point: Offset) = update {
         copy(currentPoints = listOf(point))
     }
 
-    fun addPoint(point: Offset) = update {
+    internal fun addPoint(point: Offset) = update {
         copy(currentPoints = currentPoints + point)
     }
 
-    fun endPath() = update {
+    internal fun endPath() = update {
         if (currentPoints.isEmpty()) return@update this
 
         val newPath = DrawPath(
@@ -78,12 +78,12 @@ class DrawingViewModel : ViewModel() {
         )
     }
 
-    fun undo() = update {
+    internal fun undo() = update {
         if (paths.isEmpty()) this
         else copy(paths = paths.dropLast(1))
     }
 
-    fun clear() = update {
+    internal fun clear() = update {
         copy(paths = emptyList())
     }
 }

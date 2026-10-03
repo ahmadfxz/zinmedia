@@ -5,8 +5,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application>
+        <!-- configChanges: hasil edit tetap utuh saat layar diputar atau tema berubah. -->
         <activity
             android:name="com.zinmedia.videoeditor.VideoEditorActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density"
             android:exported="false"
             android:hardwareAccelerated="true"
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
@@ -16,7 +18,12 @@
             android:name="com.zinmedia.videoeditor.VideoEditorFileProvider"
             android:authorities="${applicationId}.zinmedia.videoeditor.fileprovider"
             android:exported="false"
-            android:grantUriPermissions="true" />
+            android:grantUriPermissions="true">
+            <!-- Wajib: FileProvider.getUriForFile() membaca daftar folder dari meta-data ini. -->
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/zm_videoeditor_file_paths" />
+        </provider>
     </application>
 
 </manifest>

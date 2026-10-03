@@ -6,7 +6,7 @@ package com.zinmedia.photoeditor.engine
  *
  *
  */
-interface BrushViewChangeListener {
+internal interface BrushViewChangeListener {
     fun onViewAdd(drawingView: DrawingView)
     fun onViewRemoved(drawingView: DrawingView)
     fun onStartDrawing()

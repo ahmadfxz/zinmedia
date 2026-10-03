@@ -1,5 +1,7 @@
 package com.zinmedia.photoeditor.presentation.components
 
+import com.zinmedia.photoeditor.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +20,7 @@ import androidx.compose.ui.unit.dp
 
 
 @Composable
-fun LoadingIndicator(isLoading: Boolean) {
+internal fun LoadingIndicator(isLoading: Boolean) {
     if (isLoading) {
         Box(
             modifier = Modifier
@@ -33,7 +35,7 @@ fun LoadingIndicator(isLoading: Boolean) {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Saving...",
+                    text = stringResource(R.string.zm_saving),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White
                 )

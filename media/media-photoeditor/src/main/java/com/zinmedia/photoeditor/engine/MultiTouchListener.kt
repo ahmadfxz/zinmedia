@@ -1,12 +1,13 @@
 package com.zinmedia.photoeditor.engine
 
-import android.graphics.Rect
 import android.view.GestureDetector
 import android.view.GestureDetector.SimpleOnGestureListener
 import android.view.MotionEvent
 import android.view.View
 import android.view.View.OnTouchListener
+import android.view.ViewConfiguration
 import android.widget.ImageView
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
@@ -37,24 +38,36 @@ internal class MultiTouchListener(
     private var mPrevRawX = 0f
     private var mPrevRawY = 0f
     private val mScaleGestureDetector: ScaleGestureDetector
-    private val location = IntArray(2)
-    private var outRect: Rect? = null
     private val deleteView: View?
     private val photoEditImageView: ImageView?
     private val photoEditorView: PhotoEditorView
     private var mOnGestureControl: OnGestureControl? = null
+    private var touchedView: View? = null
     private val mOnPhotoEditorListener: OnPhotoEditorListener?
     private val viewState: PhotoEditorViewState
+    private val touchSlop = ViewConfiguration.get(photoEditorView.context).scaledTouchSlop
+    private var downRawX = 0f
+    private var downRawY = 0f
+    /** Jari sudah bergeser melewati touch slop (bukan sekadar ketukan). */
+    private var dragging = false
 
     override fun onTouch(view: View, event: MotionEvent): Boolean {
+        // Saat objek (teks/stiker) disentuh, jangan biarkan induk (mis. pager) mengambil alih gesture.
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            touchedView = view
+            view.parent?.requestDisallowInterceptTouchEvent(true)
+            // Lapisan bisa langsung diseret tanpa dipilih dulu.
+            viewState.currentSelectedView = view
+            downRawX = event.rawX
+            downRawY = event.rawY
+            dragging = false
+        }
         mScaleGestureDetector.onTouchEvent(view, event)
         mGestureListener.onTouchEvent(event)
         if (!isTranslateEnabled) {
             return true
         }
         val action = event.action
-        val x = event.rawX.toInt()
-        val y = event.rawY.toInt()
         when (action and event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 mPrevX = event.x
@@ -79,17 +92,24 @@ internal class MultiTouchListener(
                             adjustTranslation(view, currX - mPrevX, currY - mPrevY)
                         }
                     }
+                    if (!dragging && hypot(event.rawX - downRawX, event.rawY - downRawY) > touchSlop) {
+                        dragging = true
+                    }
+                    if (dragging) mOnPhotoEditorListener?.onLayerDrag(view, event.rawX, event.rawY)
                 }
-            MotionEvent.ACTION_CANCEL -> mActivePointerId = INVALID_POINTER_ID
+            MotionEvent.ACTION_CANCEL -> {
+                mActivePointerId = INVALID_POINTER_ID
+                if (dragging) mOnPhotoEditorListener?.onLayerDragEnd(view, cancelled = true)
+                dragging = false
+            }
             MotionEvent.ACTION_UP -> {
                 mActivePointerId = INVALID_POINTER_ID
-               if (!isViewInBounds(photoEditImageView, x, y)) {
-                    view.animate().translationY(0f).translationY(0f)
-                }
                 if (deleteView != null) {
                     deleteView.visibility = View.GONE
                 }
                 firePhotoEditorSDKListener(view, false)
+                if (dragging) mOnPhotoEditorListener?.onLayerDragEnd(view, cancelled = false)
+                dragging = false
             }
             MotionEvent.ACTION_POINTER_UP -> {
                 val pointerIndexPointerUp =
@@ -115,14 +135,6 @@ internal class MultiTouchListener(
         }
     }
 
-    private fun isViewInBounds(view: View?, x: Int, y: Int): Boolean {
-        return view?.run {
-            getDrawingRect(outRect)
-            getLocationOnScreen(location)
-            outRect?.offset(location[0], location[1])
-            outRect?.contains(x, y)
-        } ?: false
-    }
 
     private inner class ScaleGestureListener : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         private var mPivotX = 0f
@@ -177,6 +189,8 @@ internal class MultiTouchListener(
 
     private inner class GestureListener : SimpleOnGestureListener() {
         override fun onSingleTapUp(e: MotionEvent): Boolean {
+            // Laporkan klik ke sistem aksesibilitas (TalkBack) selain ke listener editor.
+            touchedView?.performClick()
             mOnGestureControl?.onClick()
 
             return true
@@ -249,14 +263,6 @@ internal class MultiTouchListener(
         this.photoEditorView = photoEditorView
         this.photoEditImageView = photoEditImageView
         mOnPhotoEditorListener = onPhotoEditorListener
-        outRect = if (deleteView != null) {
-            Rect(
-                deleteView.left, deleteView.top,
-                deleteView.right, deleteView.bottom
-            )
-        } else {
-            Rect(0, 0, 0, 0)
-        }
         this.viewState = viewState
     }
 }

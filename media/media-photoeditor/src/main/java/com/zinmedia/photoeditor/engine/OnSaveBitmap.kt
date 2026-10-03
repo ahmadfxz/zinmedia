@@ -7,6 +7,6 @@ import android.graphics.Bitmap
  * @version 0.1.2
  * @since 5/21/2018
  */
-interface OnSaveBitmap {
+internal interface OnSaveBitmap {
     fun onBitmapReady(saveBitmap: Bitmap)
 }

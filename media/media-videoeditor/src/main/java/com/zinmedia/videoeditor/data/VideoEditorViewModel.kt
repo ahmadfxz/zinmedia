@@ -1,5 +1,6 @@
 package com.zinmedia.videoeditor.data
 
+import com.zinmedia.videoeditor.draw.opaqueBounds
 import android.content.Context
 import android.graphics.Typeface
 import android.net.Uri
@@ -23,6 +24,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import coil3.Bitmap
 import com.zinmedia.videoeditor.core.helper.loadLutCubeFromUrl
 import com.zinmedia.videoeditor.data.repository.VideoRepository
+import com.zinmedia.videoeditor.textlayer.TextLayer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,7 +35,7 @@ import java.util.UUID
 
 
 
-class VideoEditorViewModelFactory(
+internal class VideoEditorViewModelFactory(
     private val repository: VideoRepository,
 ) : ViewModelProvider.Factory {
     @OptIn(UnstableApi::class)
@@ -49,25 +51,27 @@ class VideoEditorViewModelFactory(
 }
 
 
-data class Overlay(
+/**
+ * Satu lapisan di atas video. Semuanya berupa gambar (stiker, emoji, teks, coretan) agar
+ * preview dan hasil ekspor identik.
+ *
+ * @param posXpx posisi X (koordinat NDC -1..1, untuk ekspor).
+ * @param widthFraction lebar relatif terhadap lebar frame (0..1) sesuai preview; 0 = belum diukur.
+ * @param textLayer data teks bila overlay ini lapisan teks (bisa diedit ulang).
+ */
+internal data class Overlay(
     val id: String = UUID.randomUUID().toString(),
-    val type: Type,
-    val bitmap: ImageBitmap? = null,
-    val text: String? = null,
-    val color: Color = Color.White,
-    val bgcolor: Color = Color.Transparent,
-    val fontSize: TextUnit = 50.sp,
-    val posXpx: Float = 0f, // posisi pixel dari video
+    val bitmap: ImageBitmap,
+    val posXpx: Float = 0f,
     val posYpx: Float = 0f,
-    val scale: Float = 0.5f,
+    val scale: Float = 1f,
     val rotation: Float = 0f,
-    val typeface: Typeface = Typeface.DEFAULT,
-) {
-    enum class Type { STICKER, TEXT }
-}
+    val widthFraction: Float = 0f,
+    val textLayer: TextLayer? = null,
+)
 
 @UnstableApi
-class VideoEditorViewModel(
+internal class VideoEditorViewModel(
     private val repository: VideoRepository
 ) : ViewModel() {
 
@@ -75,15 +79,19 @@ class VideoEditorViewModel(
     // ExoPlayer
     // ---------------------------------
     private var _exoPlayer: ExoPlayer? = null
-    val exoPlayer: ExoPlayer?
+    internal val exoPlayer: ExoPlayer?
         get() = _exoPlayer
 
-    fun createExoPlayer(context: Context) {
+    internal fun createExoPlayer(context: Context) {
         if (_exoPlayer == null) {
             _exoPlayer = ExoPlayer.Builder(context).build().apply {
                 volume = 1f
 
                 addListener(object : Player.Listener {
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        if (isPlaying) startTrackingPosition() else stopTrackingPosition()
+                    }
+
                     override fun onVideoSizeChanged(videoSize: VideoSize) {
                         // Rotasi 90/270 berarti frame yang di-decode
                         // masih dalam orientasi landscape, jadi lebar
@@ -106,7 +114,23 @@ class VideoEditorViewModel(
         }
     }
 
-    fun releaseExoPlayer() {
+    /**
+     * Baca ukuran video dari metadata sebelum pemutar siap, agar bingkai preview langsung
+     * memakai rasio yang benar (tidak melompat dari 9:16).
+     */
+    internal suspend fun prefetchVideoSize(context: Context, uri: Uri) {
+        if (_videoWidth.value > 0 && _videoHeight.value > 0) return
+        val size = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.zinmedia.videoeditor.data.repository.readDisplaySize(context, uri)
+        }
+        if (size.first > 0 && size.second > 0 && _videoWidth.value == 0) {
+            _videoWidth.value = size.first
+            _videoHeight.value = size.second
+        }
+    }
+
+    internal fun releaseExoPlayer() {
+        stopTrackingPosition()
         _exoPlayer?.release()
         _exoPlayer = null
     }
@@ -115,16 +139,16 @@ class VideoEditorViewModel(
     // Video state
     // ---------------------------------
     private val _videoDurationMs = MutableStateFlow(0L)
-    val videoDurationMs: StateFlow<Long> = _videoDurationMs
+    internal val videoDurationMs: StateFlow<Long> = _videoDurationMs
 
     private val _startMs = MutableStateFlow(0L)
-    val startMs: StateFlow<Long> = _startMs
+    internal val startMs: StateFlow<Long> = _startMs
 
     private val _endMs = MutableStateFlow(0L)
-    val endMs: StateFlow<Long> = _endMs
+    internal val endMs: StateFlow<Long> = _endMs
 
     private val _currentPlayTimeMs = MutableStateFlow(0L)
-    val currentPlayTimeMs: StateFlow<Long> = _currentPlayTimeMs
+    internal val currentPlayTimeMs: StateFlow<Long> = _currentPlayTimeMs
 
     private var currentUri: Uri? = null
 
@@ -132,113 +156,161 @@ class VideoEditorViewModel(
     // Export
     // ---------------------------------
     private val _exporting = MutableStateFlow(false)
-    val exporting: StateFlow<Boolean> = _exporting
+    internal val exporting: StateFlow<Boolean> = _exporting
 
     private val _exportProgress = MutableStateFlow(0f)
-    val exportProgress: StateFlow<Float> = _exportProgress
+    internal val exportProgress: StateFlow<Float> = _exportProgress
 
     private val _cubeUrl = MutableStateFlow("")
-    val cubeUrl: StateFlow<String> = _cubeUrl
+    internal val cubeUrl: StateFlow<String> = _cubeUrl
 
     private val _isInisialisasi = MutableStateFlow(true)
 
-    val isInisialisasi: StateFlow<Boolean> = _isInisialisasi
+    internal val isInisialisasi: StateFlow<Boolean> = _isInisialisasi
 
-    private var currentAudioUrl: String? = null
 
 
     // ---------------------------------
     // Overlay
     // ---------------------------------
     private val _overlays = MutableStateFlow<List<Overlay>>(emptyList())
-    val overlays: StateFlow<List<Overlay>> = _overlays
+    internal val overlays: StateFlow<List<Overlay>> = _overlays
 
     private val _drawOverlay = MutableStateFlow<Overlay?>(null)
-    val drawOverlay: StateFlow<Overlay?> = _drawOverlay
+    internal val drawOverlay: StateFlow<Overlay?> = _drawOverlay
 
     private var _videoWidth = MutableStateFlow(0)
-    val videoWidth: StateFlow<Int> = _videoWidth
+    internal val videoWidth: StateFlow<Int> = _videoWidth
 
     private var _videoHeight = MutableStateFlow(0)
-    val videoHeight: StateFlow<Int> = _videoHeight
+    internal val videoHeight: StateFlow<Int> = _videoHeight
 
     init {
         viewModelScope.launch {
-            cubeUrl.collectLatest { url ->
-                if (url.isNotEmpty()) {
-                    val lutCube = loadLutCubeFromUrl(cubeUrl.value)
-                    if (lutCube != null) {
-                        _exoPlayer?.apply {
-                            val videoEffects = listOf(SingleColorLut.createFromCube(lutCube))
-                            stop()
-                            setVideoEffects(videoEffects)
-                            prepare()
-                        }
-                    } else {
-                        Log.e("LUT", "Gagal load LUT")
-                    }
-                } else {
-                    // Tanpa filter: kosongkan efek preview.
-                    _exoPlayer?.apply {
-                        stop()
-                        setVideoEffects(emptyList())
-                        prepare()
-                    }
+            cubeUrl.collectLatest { url -> applyCube(url) }
+        }
+    }
+
+    /** Pasang (atau kosongkan) efek LUT pada pemutar preview. */
+    private suspend fun applyCube(url: String) {
+        if (url.isNotEmpty()) {
+            val lutCube = loadLutCubeFromUrl(url)
+            if (lutCube != null) {
+                _exoPlayer?.apply {
+                    stop()
+                    setVideoEffects(listOf(SingleColorLut.createFromCube(lutCube)))
+                    prepare()
                 }
+            } else {
+                Log.e("LUT", "Gagal load LUT")
+            }
+        } else {
+            // Tanpa filter: kosongkan efek preview.
+            _exoPlayer?.apply {
+                stop()
+                setVideoEffects(emptyList())
+                prepare()
             }
         }
     }
 
-    fun setAudioReplacement(contex: Context, url: String?) {
-        currentAudioUrl = url
-        setTrim(_startMs.value, _endMs.value)
-    }
-
-    fun addOverlay(overlay: Overlay) {
+    internal fun addOverlay(overlay: Overlay) {
         _overlays.value = _overlays.value + overlay
     }
 
-    fun updateOverlay(updated: Overlay) {
+    internal fun updateOverlay(updated: Overlay) {
         _overlays.value = _overlays.value.map { if (it.id == updated.id) updated else it }
     }
 
-    fun removeOverlay(id: String) {
+    internal fun removeOverlay(id: String) {
         _overlays.value = _overlays.value.filter { it.id != id }
     }
 
-    fun setDrawOverlay(bitmap: Bitmap) {
+    /** Area editor (lebar, tinggi) dalam satuan lebar video di preview: batas perluasan kanvas ekspor. */
+    private var canvasLimit: Pair<Float, Float>? = null
+
+    internal fun setPreviewLayout(videoWidthPx: Float, areaWidthPx: Float, areaHeightPx: Float) {
+        if (videoWidthPx > 0f) canvasLimit = areaWidthPx / videoWidthPx to areaHeightPx / videoWidthPx
+    }
+
+    /** Piksel hasil ekspor per piksel preview; coretan dirender dengan skala ini agar tetap tajam. */
+    internal fun drawingScale(videoWidthPx: Float): Float {
+        val exportWidth = com.zinmedia.videoeditor.data.repository.fitExportSize(_videoWidth.value, _videoHeight.value).first
+        return if (videoWidthPx > 1f) (exportWidth / videoWidthPx).coerceAtLeast(1f) else 1f
+    }
+
+    /**
+     * Simpan coretan sebagai overlay. [bitmap] mencakup seluruh area editor (video di tengahnya);
+     * dipotong ke bagian yang tergambar lalu diposisikan relatif terhadap frame video, seperti stiker.
+     */
+    internal fun setDrawOverlay(
+        bitmap: Bitmap,
+        areaWidthPx: Float,
+        areaHeightPx: Float,
+        videoWidthPx: Float,
+        videoHeightPx: Float,
+    ) {
+        val bounds = bitmap.opaqueBounds()
+        if (bounds == null || areaWidthPx <= 0f || videoWidthPx <= 1f || videoHeightPx <= 1f) {
+            _drawOverlay.value = null
+            return
+        }
+        val scale = bitmap.width / areaWidthPx
+        val cropped = Bitmap.createBitmap(bitmap, bounds.left, bounds.top, bounds.width(), bounds.height())
+        // Pusat potongan dalam koordinat frame video (preview px).
+        val centerX = bounds.exactCenterX() / scale - (areaWidthPx - videoWidthPx) / 2f
+        val centerY = bounds.exactCenterY() / scale - (areaHeightPx - videoHeightPx) / 2f
         _drawOverlay.value = Overlay(
-            type = Overlay.Type.STICKER,
-            bitmap = bitmap.asImageBitmap(),
-            scale = 1f,
-            posXpx = 0f,  // misal default pixel X
-            posYpx = 0f   // misal default pixel Y
+            bitmap = cropped.asImageBitmap(),
+            posXpx = centerX / videoWidthPx * 2f - 1f,
+            posYpx = -(centerY / videoHeightPx * 2f - 1f),
+            widthFraction = bounds.width() / scale / videoWidthPx,
         )
     }
 
     // ---------------------------------
     // Play tracking
     // ---------------------------------
-    fun startTrackingPosition() {
-        viewModelScope.launch {
+    private var trackingJob: kotlinx.coroutines.Job? = null
+
+    /** Pantau posisi pemutaran hanya selama video diputar (hemat baterai). */
+    private fun startTrackingPosition() {
+        if (trackingJob?.isActive == true) return
+        trackingJob = viewModelScope.launch {
             while (true) {
                 _currentPlayTimeMs.value = _exoPlayer?.currentPosition ?: 0L
-                delay(50)
+                delay(POSITION_POLL_MS)
             }
         }
+    }
+
+    private fun stopTrackingPosition() {
+        trackingJob?.cancel()
+        trackingJob = null
+        _exoPlayer?.let { _currentPlayTimeMs.value = it.currentPosition }
     }
 
     // ---------------------------------
     // Cube effect
     // ---------------------------------
-    fun selectCubeEffect(urlCube: String) {
+    internal fun selectCubeEffect(urlCube: String) {
         _cubeUrl.value = urlCube
     }
 
     // ---------------------------------
     // Load video
     // ---------------------------------
-    fun loadUri(uri: Uri) {
+    internal fun loadUri(uri: Uri) {
+        // Pemutar dibuat ulang (mis. halaman editor dibuka lagi): pertahankan trim & filter.
+        if (uri == currentUri && _videoDurationMs.value > 0) {
+            _exoPlayer?.apply {
+                setMediaItem(buildTrimmedMediaItem(uri, _startMs.value, _endMs.value))
+                prepare()
+                repeatMode = Player.REPEAT_MODE_ALL
+            }
+            if (_cubeUrl.value.isNotEmpty()) viewModelScope.launch { applyCube(_cubeUrl.value) }
+            return
+        }
         currentUri = uri
         val mediaItem = MediaItem.fromUri(uri)
         _exoPlayer?.apply {
@@ -253,28 +325,31 @@ class VideoEditorViewModel(
                     _videoDurationMs.value = duration
                     _endMs.value = duration
                     _exoPlayer?.removeListener(this)
-                    startTrackingPosition()
                 }
             }
         })
     }
 
-    fun setTrim(
+    internal fun setTrim(
         startMs: Long,
         endMs: Long
     ) {
         val safeStart = startMs.coerceAtLeast(0L)
         val safeEnd = endMs.coerceAtMost(videoDurationMs.value)
+        // Nilai sama (mis. laporan awal dari timeline): jangan muat ulang video, bisa membuat preview berkedip.
+        if (safeStart == _startMs.value && safeEnd == _endMs.value) return
         _startMs.value = safeStart
         _endMs.value = safeEnd
+        reloadTrimmedMediaItem()
+    }
+
+    private fun reloadTrimmedMediaItem() {
         currentUri?.let {
-            val mediaItem = buildTrimmedMediaItem(it, safeStart, safeEnd)
-            _exoPlayer?.setMediaItem(mediaItem)
-            // _exoPlayer?.prepare()
+            _exoPlayer?.setMediaItem(buildTrimmedMediaItem(it, _startMs.value, _endMs.value))
         }
     }
 
-    fun buildTrimmedMediaItem(
+    internal fun buildTrimmedMediaItem(
         uri: Uri,
         startMs: Long,
         endMs: Long
@@ -295,7 +370,26 @@ class VideoEditorViewModel(
     // ---------------------------------
     // Export video via repository
     // ---------------------------------
-    fun exportVideo(
+    /** Ada teks/stiker/coretan, filter, atau trim. */
+    internal fun hasEdits(): Boolean {
+        val duration = _videoDurationMs.value
+        return _overlays.value.isNotEmpty() ||
+            _drawOverlay.value != null ||
+            _cubeUrl.value.isNotEmpty() ||
+            _startMs.value > 0 ||
+            (duration > 0 && _endMs.value in 1 until duration)
+    }
+
+    /** Ekspor video ke [outputFile]; mengembalikan path hasil, atau melempar error. */
+    internal suspend fun exportToFile(context: Context, outputFile: File): String =
+        kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+            exportVideo(context, outputFile.parentFile ?: context.cacheDir, outputFile) { path, error ->
+                if (path != null) cont.resumeWith(Result.success(path))
+                else cont.resumeWith(Result.failure(error ?: IllegalStateException("Ekspor video gagal")))
+            }
+        }
+
+    internal fun exportVideo(
         context: Context,
         cacheDir: File,
         outputFile: File? = null,
@@ -307,11 +401,8 @@ class VideoEditorViewModel(
             return
         }
 
-        val allOverlay = if (_drawOverlay.value != null) {
-            listOf(_drawOverlay.value!!) + _overlays.value
-        } else {
-            _overlays.value
-        }
+        // Urutan tumpukan sama dengan preview: urutan penambahan, coretan paling atas.
+        val allOverlay = _overlays.value + listOfNotNull(_drawOverlay.value)
 
         viewModelScope.launch {
             _exporting.value = true
@@ -320,10 +411,11 @@ class VideoEditorViewModel(
             repository.exportVideo(
                 context = context,
                 uri = uri,
-                audioUrl = currentAudioUrl?.toUri(),
+                audioUrl = null,
                 startMs = _startMs.value,
                 endMs = _endMs.value,
                 overlays = allOverlay,
+                canvasLimit = canvasLimit,
                 cubeUrl = _cubeUrl.value,
                 cacheDir = cacheDir,
                 outputFile = outputFile,
@@ -339,7 +431,7 @@ class VideoEditorViewModel(
     // ---------------------------------
     // Add sticker via repository
     // ---------------------------------
-    suspend fun addStickerFromUrl(
+    internal suspend fun addStickerFromUrl(
         context: Context,
         url: String,
         posXpx: Float = 0f,
@@ -356,3 +448,5 @@ class VideoEditorViewModel(
     }
 
 }
+
+private const val POSITION_POLL_MS = 50L

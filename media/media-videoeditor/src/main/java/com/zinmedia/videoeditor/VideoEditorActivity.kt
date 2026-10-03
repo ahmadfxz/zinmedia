@@ -1,5 +1,8 @@
 package com.zinmedia.videoeditor
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import androidx.lifecycle.lifecycleScope
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -25,12 +28,16 @@ import com.zinmedia.videoeditor.ui.createCustomImageLoader
 import java.io.File
 import java.io.FileOutputStream
 
-
-class VideoEditorActivity : ComponentActivity() {
+public class VideoEditorActivity : ComponentActivity() {
 
     @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Hapus hasil edit lama dari sesi sebelumnya.
+        lifecycleScope.launch(Dispatchers.IO) {
+            VideoEditorFileProvider.deleteOldOutputs(applicationContext)
+        }
         // Editor selalu bertema gelap: ikon status & navigation bar terang di atas latar hitam.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.Transparent.toArgb()),
@@ -45,19 +52,18 @@ class VideoEditorActivity : ComponentActivity() {
             finish()
             return
         }
-        // setupBackPressHandler()
         val imageLoader = createCustomImageLoader(applicationContext)
         setContent {
             CompositionLocalProvider(LocalImageLoader provides imageLoader) {
                 MarketplaceTheme {
                     VideoEditorScreen(
                         videoUri = inputUri,
-                        recipientLabel = intent.getStringExtra(EXTRA_RECIPIENT_LABEL) ?: DEFAULT_RECIPIENT_LABEL,
+                        recipientLabel = intent.getStringExtra(EXTRA_RECIPIENT_LABEL) ?: getString(R.string.zm_recipient_default),
                         onExportFinished = { finalUri, keterangan ->
                             val result = Intent().apply {
                                 data = finalUri
-                                putExtra("keterangan", keterangan)
-                                putExtra("media_type", "video")
+                                putExtra(EXTRA_CAPTION, keterangan)
+                                putExtra(EXTRA_MEDIA_TYPE, "video")
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
                             setResult(RESULT_OK, result)
@@ -84,9 +90,14 @@ class VideoEditorActivity : ComponentActivity() {
         finish()
     }
 
-    companion object {
+    public companion object {
+        /** Hasil: keterangan yang diketik pengguna. */
+        public const val EXTRA_CAPTION: String = "keterangan"
+
+        /** Hasil: jenis media, `"image"` atau `"video"`. */
+        public const val EXTRA_MEDIA_TYPE: String = "media_type"
+
         /** Label penerima di kiri tombol kirim, mis. "Status (Kontak)". Default: "Status". */
-        const val EXTRA_RECIPIENT_LABEL = "com.zinmedia.extra.RECIPIENT_LABEL"
-        private const val DEFAULT_RECIPIENT_LABEL = "Status"
+        public const val EXTRA_RECIPIENT_LABEL: String = "com.zinmedia.extra.RECIPIENT_LABEL"
     }
 }

@@ -20,52 +20,31 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 
-//
-//@OptIn(UnstableApi::class)
-//@Composable
-//fun VideoPreviewPlayer(player: ExoPlayer, modifier: Modifier = Modifier) {
-//
-//        AndroidView(
-//            factory = { ctx ->
-//                PlayerView(ctx).apply {
-//                    useController = false
-//                    this.player = player
-//                   // this.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-//                    // <-- DISABLE controller
 ////                layoutParams = FrameLayout.LayoutParams(
 ////                    ViewGroup.LayoutParams.MATCH_PARENT,
 ////                    ViewGroup.LayoutParams.MATCH_PARENT
 ////                )
-//                }
-//            },
-//            modifier = modifier
-//                .clip(RoundedCornerShape(16.dp))
-//                .clickable {
-//                    player.playWhenReady = !player.playWhenReady
-//                }
-//        )
-//
-//}
 
 @OptIn(UnstableApi::class)
 @Composable
-fun VideoPreviewPlayer(
+internal fun VideoPreviewPlayer(
     player: ExoPlayer,
     modifier: Modifier = Modifier
 ) {
     // RASIO 9:16
 
-
     AndroidView(
         factory = { ctx ->
             PlayerView(ctx).apply {
                 useController = false
+                // Pertahankan frame terakhir saat media diganti (mis. trim) dan jangan tampilkan
+                // penutup hitam sebelum frame pertama, agar preview tidak berkedip.
+                setKeepContentOnPlayerReset(true)
+                setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                 this.player = player
-              //  this.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
             }
         },
         modifier = modifier
-           // .clip(RoundedCornerShape(16.dp))
             .clickable {
                 player.playWhenReady = !player.playWhenReady
             }

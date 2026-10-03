@@ -40,14 +40,17 @@ internal class GraphicManager(
         )
     }
 
-    fun removeView(graphic: Graphic) {
-        val view = graphic.rootView
+    fun removeView(graphic: Graphic) = removeView(graphic.rootView)
+
+    /** Hapus lapisan (teks/stiker/emoji); tipenya dibaca dari tag view. */
+    fun removeView(view: View) {
+        val viewType = view.tag as? ViewType ?: return
         if (mViewState.containsAddedView(view)) {
             mPhotoEditorView.removeView(view)
             mViewState.removeAddedView(view)
             mViewState.pushRedoView(view)
             onPhotoEditorListener?.onRemoveViewListener(
-                graphic.viewType,
+                viewType,
                 mViewState.addedViewsCount
             )
         }
@@ -58,27 +61,9 @@ internal class GraphicManager(
         mViewState.replaceAddedView(view)
     }
 
-    //    fun undoView(): Boolean {
-//        if (mViewState.addedViewsCount > 0) {
-//            val removeView = mViewState.getAddedView(
-//                mViewState.addedViewsCount - 1
-//            )
-//            if (removeView is DrawingView) {
-//                return removeView.undo() || (mViewState.addedViewsCount != 0)
-//            } else {
 ////                mViewState.removeAddedView(mViewState.addedViewsCount - 1)
 ////                mPhotoEditorView.removeView(removeView)
 ////                mViewState.pushRedoView(removeView)
-//            }
-//            when (val viewTag = removeView.tag) {
-//                is ViewType -> onPhotoEditorListener?.onRemoveViewListener(
-//                    viewTag,
-//                    mViewState.addedViewsCount
-//                )
-//            }
-//        }
-//        return mViewState.addedViewsCount != 0
-//    }
     fun undoView(): Boolean {
         if (mDrawerViewState.addedViewsCount == 0) return false
 
@@ -86,14 +71,11 @@ internal class GraphicManager(
 
         return if (lastView is DrawingView) {
             lastView.undo().also { success ->
-                Log.d("UNDO", "Undo drawing: $success")
             }
         } else {
             false
         }
     }
-
-
 
     fun redoView(): Boolean {
         if (redoStackCount > 0) {

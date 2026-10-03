@@ -19,7 +19,7 @@ internal class Sticker(
     context = mPhotoEditorView.context,
     graphicManager = graphicManager,
     viewType = ViewType.IMAGE,
-    layoutId = R.layout.view_photo_editor_image
+    layoutId = R.layout.zm_view_photo_editor_image
 ) {
     private var imageView: ImageView? = null
     fun buildView(desiredImage: Bitmap?) {

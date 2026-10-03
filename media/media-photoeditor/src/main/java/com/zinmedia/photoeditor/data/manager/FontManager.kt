@@ -4,45 +4,38 @@ import android.content.Context
 import android.graphics.Typeface
 import com.zinmedia.photoeditor.domain.model.FontItem
 
+/**
+ * Font untuk mode teks, dimuat dari aset aplikasi (lihat README). Dimuat sekali per proses lalu
+ * dipakai bersama, karena membaca file font cukup mahal (mis. saat banyak foto dibuka sekaligus).
+ */
+internal class FontManager(context: Context) {
 
-class FontManager(private val context: Context) {
-    private val fontMap = mutableMapOf<Int, FontItem>()
+    internal val fonts: List<FontItem> = loadFonts(context.applicationContext)
 
-    val fonts: List<FontItem>
-        get() = fontMap.values.toList()
+    internal fun getFont(fontId: Int): Typeface =
+        fonts.firstOrNull { it.id == fontId }?.typeface ?: Typeface.DEFAULT
 
-    init {
-        initializeFonts()
-    }
+    private companion object {
+        @Volatile
+        private var cached: List<FontItem>? = null
 
-    private fun initializeFonts() {
-        val fontDefinitions = listOf(
-            FontItem(0, "Inter", loadFont("inter_18pt_bold.ttf") ?: Typeface.DEFAULT_BOLD),
-            FontItem(1, "Monofett", loadFont("monofett_regular.ttf") ?: Typeface.DEFAULT),
-            FontItem(2, "Caveat", loadFont("caveat_regular.ttf") ?: Typeface.SERIF),
-            FontItem(3, "Pacifico", loadFont("pacifico_regular.ttf") ?: Typeface.MONOSPACE),
-            FontItem(4, "Rampartone", loadFont("rampartone_regular.ttf") ?: Typeface.DEFAULT),
-            FontItem(5, "Karla", loadFont("karla_bold.ttf") ?: Typeface.DEFAULT),
-        )
+        fun loadFonts(context: Context): List<FontItem> =
+            cached ?: synchronized(this) {
+                cached ?: listOf(
+                    FontItem(0, "Inter", context.loadFont("inter_18pt_bold.ttf") ?: Typeface.DEFAULT_BOLD),
+                    FontItem(1, "Monofett", context.loadFont("monofett_regular.ttf") ?: Typeface.DEFAULT),
+                    FontItem(2, "Caveat", context.loadFont("caveat_regular.ttf") ?: Typeface.SERIF),
+                    FontItem(3, "Pacifico", context.loadFont("pacifico_regular.ttf") ?: Typeface.MONOSPACE),
+                    FontItem(4, "Rampartone", context.loadFont("rampartone_regular.ttf") ?: Typeface.DEFAULT),
+                    FontItem(5, "Karla", context.loadFont("karla_bold.ttf") ?: Typeface.DEFAULT),
+                ).also { cached = it }
+            }
 
-        fontDefinitions.forEach { fontItem ->
-            fontMap[fontItem.id] = fontItem
-        }
-    }
-
-    private fun loadFont(fontName: String): Typeface? {
-        return try {
-            Typeface.createFromAsset(context.assets, fontName)
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    fun getFont(fontId: Int): Typeface {
-        return fontMap[fontId]?.typeface ?: Typeface.DEFAULT
-    }
-
-    fun getFontOrNull(fontId: Int): Typeface? {
-        return fontMap[fontId]?.typeface
+        private fun Context.loadFont(fileName: String): Typeface? =
+            try {
+                Typeface.createFromAsset(assets, fileName)
+            } catch (e: Exception) {
+                null
+            }
     }
 }

@@ -10,7 +10,7 @@ package com.zinmedia.photoeditor.engine
  * @version 0.1.1
  * @since 18/01/2017.
  */
-enum class ViewType {
+internal enum class ViewType {
     BRUSH_DRAWING,
     TEXT,
     IMAGE,

@@ -1,7 +1,7 @@
 package com.zinmedia.photoeditor.engine
 
 import android.graphics.Bitmap
-import android.graphics.Color
+import android.graphics.Rect
 import android.opengl.GLSurfaceView
 import java.nio.IntBuffer
 import javax.microedition.khronos.opengles.GL10
@@ -17,52 +17,28 @@ import javax.microedition.khronos.opengles.GL10
  * @since 5/21/2018
  */
 internal object BitmapUtil {
-    /**
-     * Remove transparency in edited bitmap
-     *
-     * @param source edited image
-     * @return bitmap without any transparency
-     */
-    fun removeTransparency(source: Bitmap): Bitmap {
-        var firstX = 0
-        var firstY = 0
-        var lastX = source.width
-        var lastY = source.height
-        val pixels = IntArray(source.width * source.height)
-        source.getPixels(pixels, 0, source.width, 0, 0, source.width, source.height)
-        loop@ for (x in 0 until source.width) {
-            for (y in 0 until source.height) {
-                if (pixels[x + y * source.width] != Color.TRANSPARENT) {
-                    firstX = x
-                    break@loop
+    /** Batas piksel yang tidak transparan pada [source]; `null` bila seluruhnya transparan. */
+    fun opaqueBounds(source: Bitmap): Rect? {
+        val width = source.width
+        val height = source.height
+        val pixels = IntArray(width * height)
+        source.getPixels(pixels, 0, width, 0, 0, width, height)
+        var left = width
+        var top = height
+        var right = -1
+        var bottom = -1
+        for (y in 0 until height) {
+            val row = y * width
+            for (x in 0 until width) {
+                if (pixels[row + x] ushr 24 != 0) {
+                    if (x < left) left = x
+                    if (x > right) right = x
+                    if (y < top) top = y
+                    bottom = y
                 }
             }
         }
-        loop@ for (y in 0 until source.height) {
-            for (x in firstX until source.width) {
-                if (pixels[x + y * source.width] != Color.TRANSPARENT) {
-                    firstY = y
-                    break@loop
-                }
-            }
-        }
-        loop@ for (x in source.width - 1 downTo firstX) {
-            for (y in source.height - 1 downTo firstY) {
-                if (pixels[x + y * source.width] != Color.TRANSPARENT) {
-                    lastX = x
-                    break@loop
-                }
-            }
-        }
-        loop@ for (y in source.height - 1 downTo firstY) {
-            for (x in source.width - 1 downTo firstX) {
-                if (pixels[x + y * source.width] != Color.TRANSPARENT) {
-                    lastY = y
-                    break@loop
-                }
-            }
-        }
-        return Bitmap.createBitmap(source, firstX, firstY, lastX - firstX, lastY - firstY)
+        return if (right < 0) null else Rect(left, top, right + 1, bottom + 1)
     }
 
     /**

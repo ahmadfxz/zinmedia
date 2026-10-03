@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 
 
 @Composable
-fun ExportProgress(
+internal fun ExportProgress(
     progress: Float,
     modifier: Modifier = Modifier
 ) {

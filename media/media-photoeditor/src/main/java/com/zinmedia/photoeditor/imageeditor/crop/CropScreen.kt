@@ -1,5 +1,6 @@
 package com.zinmedia.photoeditor.imageeditor.crop
 
+import androidx.compose.ui.res.stringResource
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
@@ -233,7 +234,7 @@ internal fun CropScreen(
             EditorTopBar(onClose = onCancel) {
                 if (quarterTurns % 4 != 0 || flipped || aspect != CropAspect.Free || (frame.width > 0f && currentRect() != FullRect)) {
                     Text(
-                        text = "Atur ulang",
+                        text = stringResource(R.string.zm_reset),
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
@@ -380,7 +381,7 @@ internal fun CropScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = option.label,
+                            text = option.labelRes?.let { stringResource(it) } ?: option.label,
                             color = if (active) Color.Black else Color.White,
                             fontSize = 13.sp,
                             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
@@ -401,7 +402,7 @@ internal fun CropScreen(
             ) {
                 EditorIconButton(
                     icon = R.drawable.zm_ic_rotate,
-                    contentDescription = "Putar",
+                    contentDescription = stringResource(R.string.zm_rotate),
                     onClick = {
                         val rect = currentRect().rotatedCcw()
                         // Memutar gambar yang dicerminkan = mencerminkan gambar yang diputar arah sebaliknya.
@@ -413,7 +414,7 @@ internal fun CropScreen(
                 Spacer(Modifier.weight(1f))
                 EditorIconButton(
                     icon = R.drawable.zm_ic_flip,
-                    contentDescription = "Cermin",
+                    contentDescription = stringResource(R.string.zm_mirror),
                     onClick = {
                         val rect = currentRect().flippedHorizontally()
                         flipped = !flipped

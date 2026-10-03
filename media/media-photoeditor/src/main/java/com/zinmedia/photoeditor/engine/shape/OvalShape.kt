@@ -5,12 +5,11 @@ import android.graphics.RectF
 import android.util.Log
 import kotlin.math.abs
 
-class OvalShape : AbstractShape("OvalShape") {
+internal class OvalShape : AbstractShape("OvalShape") {
     private var lastX = 0f
     private var lastY = 0f
 
     override fun startShape(x: Float, y: Float) {
-        Log.d(tag, "startShape@ $x,$y")
         left = x
         top = y
     }
@@ -37,6 +36,5 @@ class OvalShape : AbstractShape("OvalShape") {
     }
 
     override fun stopShape() {
-        Log.d(tag, "stopShape")
     }
 }

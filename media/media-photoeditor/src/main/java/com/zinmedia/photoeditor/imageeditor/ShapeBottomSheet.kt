@@ -1,5 +1,6 @@
 package com.zinmedia.photoeditor.imageeditor
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -28,14 +29,14 @@ import com.zinmedia.photoeditor.ui.EditorTopBar
 import com.zinmedia.photoeditor.ui.VerticalColorPicker
 import com.zinmedia.photoeditor.ui.VerticalSizePicker
 
-private data class DrawTool(val shape: ShapeType, val icon: Int, val label: String)
+private data class DrawTool(val shape: ShapeType, val icon: Int, val label: Int)
 
 private val DrawTools = listOf(
-    DrawTool(ShapeType.Brush, R.drawable.zm_ic_pen, "Pena"),
-    DrawTool(ShapeType.Line, R.drawable.ic_line, "Garis"),
-    DrawTool(ShapeType.Arrow(), R.drawable.ic_arrow, "Panah"),
-    DrawTool(ShapeType.Oval, R.drawable.ic_oval, "Oval"),
-    DrawTool(ShapeType.Rectangle, R.drawable.ic_rectangle, "Kotak"),
+    DrawTool(ShapeType.Brush, R.drawable.zm_ic_pen, R.string.zm_pen),
+    DrawTool(ShapeType.Line, R.drawable.zm_ic_line, R.string.zm_line),
+    DrawTool(ShapeType.Arrow(), R.drawable.zm_ic_arrow, R.string.zm_arrow),
+    DrawTool(ShapeType.Oval, R.drawable.zm_ic_oval, R.string.zm_oval),
+    DrawTool(ShapeType.Rectangle, R.drawable.zm_ic_rectangle, R.string.zm_rectangle),
 )
 
 /**
@@ -43,7 +44,7 @@ private val DrawTools = listOf(
  * slider ukuran di kiri, dan pilihan kuas/bentuk/penghapus di bawah.
  */
 @Composable
-fun DrawWidget(
+internal fun DrawWidget(
     enableUndo: Boolean,
     isEnableEraser: Boolean,
     onUndo: () -> Unit,
@@ -74,7 +75,7 @@ fun DrawWidget(
         EditorTopBar(
             onClose = onUndo,
             closeIcon = R.drawable.zm_ic_undo,
-            closeDescription = "Urungkan",
+            closeDescription = stringResource(R.string.zm_undo),
             closeEnabled = enableUndo,
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
@@ -114,7 +115,7 @@ fun DrawWidget(
             DrawTools.forEach { tool ->
                 EditorIconButton(
                     icon = tool.icon,
-                    contentDescription = tool.label,
+                    contentDescription = stringResource(tool.label),
                     selected = !isEnableEraser && tool == selectedTool,
                     onClick = {
                         selectedTool = tool
@@ -124,8 +125,8 @@ fun DrawWidget(
                 )
             }
             EditorIconButton(
-                icon = R.drawable.ic_eraser,
-                contentDescription = "Penghapus",
+                icon = R.drawable.zm_ic_eraser,
+                contentDescription = stringResource(R.string.zm_eraser),
                 selected = isEnableEraser,
                 onClick = onEraser,
             )

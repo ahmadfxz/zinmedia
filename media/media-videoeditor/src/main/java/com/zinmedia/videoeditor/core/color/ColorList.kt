@@ -3,7 +3,7 @@ package com.zinmedia.videoeditor.core.color
 import androidx.compose.ui.graphics.Color
 
 
-val ListWarnaPicker = listOf(
+internal val ListWarnaPicker = listOf(
     // WARNA DASAR
     Color(0xFFFFFFFF), // Putih
     Color(0xFF000000), // Hitam

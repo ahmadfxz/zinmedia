@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,39 +45,50 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.toBitmap
+import com.zinmedia.photoeditor.PhotoEditorConfig
+import com.zinmedia.photoeditor.R
 import com.zinmedia.photoeditor.ui.EditorBottomSheet
 import com.zinmedia.photoeditor.ui.TrayTabs
 
 /** Tray stiker: satu sheet dengan tab Emoji dan Stiker. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StickerTraySheet(
+internal fun StickerTraySheet(
     onEmojiSelected: (String) -> Unit,
     onStickerSelected: (Bitmap) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    val emojis = PhotoEditorConfig.emojis
+    val stickers = PhotoEditorConfig.stickers
+    val tabs = buildList {
+        if (emojis.isNotEmpty()) add(TrayTab.Emoji)
+        if (stickers.isNotEmpty()) add(TrayTab.Sticker)
+    }
+    var selected by rememberSaveable { mutableIntStateOf(0) }
+    val tab = tabs.getOrNull(selected) ?: tabs.firstOrNull() ?: return
 
     EditorBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        TrayTabs(
-            tabs = listOf("Emoji", "Stiker"),
-            selected = tab,
-            onSelect = { tab = it },
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
-        Spacer(Modifier.height(12.dp))
+        if (tabs.size > 1) {
+            TrayTabs(
+                tabs = tabs.map { stringResource(it.label) },
+                selected = tabs.indexOf(tab),
+                onSelect = { selected = it },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+        }
         when (tab) {
-            0 -> LazyVerticalGrid(
+            TrayTab.Emoji -> LazyVerticalGrid(
                 columns = GridCells.Fixed(7),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(TrayHeight),
                 contentPadding = PaddingValues(horizontal = 12.dp),
             ) {
-                items(EmojiData.emojis) { emoji ->
+                items(emojis) { emoji ->
                     Box(
                         modifier = Modifier
                             .aspectRatio(1f)
@@ -89,7 +101,7 @@ fun StickerTraySheet(
                 }
             }
 
-            else -> LazyVerticalGrid(
+            TrayTab.Sticker -> LazyVerticalGrid(
                 columns = GridCells.Fixed(4),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -98,12 +110,17 @@ fun StickerTraySheet(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(StickerData.stickerUrls) { url ->
+                items(stickers) { url ->
                     StickerCell(url = url, onStickerSelected = onStickerSelected)
                 }
             }
         }
     }
+}
+
+private enum class TrayTab(val label: Int) {
+    Emoji(R.string.zm_tab_emoji),
+    Sticker(R.string.zm_tab_sticker),
 }
 
 @Composable
@@ -124,7 +141,7 @@ private fun StickerCell(
     ) {
         AsyncImage(
             model = ImageRequest.Builder(context).data(url).size(256, 256).build(),
-            contentDescription = "Stiker",
+            contentDescription = stringResource(R.string.zm_sticker),
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Fit,
             onLoading = { isLoading = true },
@@ -156,55 +173,4 @@ private fun loadSticker(
         .target { image -> onLoaded(image.toBitmap()) }
         .build()
     SingletonImageLoader.get(context).enqueue(request)
-}
-
-object StickerData {
-    // Image Urls from flaticon(https://www.flaticon.com/stickers-pack/food-289)
-    val stickerUrls = listOf(
-        "https://cdn-icons-png.flaticon.com/256/4392/4392471.png",
-        "https://cdn-icons-png.flaticon.com/256/4392/4392522.png",
-        "https://cdn-icons-png.flaticon.com/256/4213/4213612.png",
-        "https://cdn-icons-png.flaticon.com/256/4213/4213605.png",
-        "https://cdn-icons-png.flaticon.com/256/4213/4213517.png",
-        "https://cdn-icons-png.flaticon.com/256/4228/4228685.png",
-        "https://cdn-icons-png.flaticon.com/256/4329/4329960.png",
-        "https://cdn-icons-png.flaticon.com/256/6702/6702479.png",
-        "https://cdn-icons-png.flaticon.com/256/6852/6852961.png",
-        "https://cdn-icons-png.flaticon.com/256/6852/6852993.png",
-        "https://cdn-icons-png.flaticon.com/256/8137/8137252.png",
-        "https://cdn-icons-png.flaticon.com/256/8137/8137255.png",
-        "https://cdn-icons-png.flaticon.com/256/8137/8137228.png",
-        "https://cdn-icons-png.flaticon.com/256/8137/8137225.png",
-        "https://cdn-icons-png.flaticon.com/256/8137/8137202.png",
-        "https://cdn-icons-png.flaticon.com/256/4392/4392452.png",
-        "https://cdn-icons-png.flaticon.com/256/4392/4392455.png",
-        "https://cdn-icons-png.flaticon.com/256/4392/4392459.png",
-        "https://cdn-icons-png.flaticon.com/256/4392/4392462.png",
-        "https://cdn-icons-png.flaticon.com/256/4392/4392465.png",
-        "https://cdn-icons-png.flaticon.com/256/4392/4392467.png",
-        "https://cdn-icons-png.flaticon.com/256/4392/4392469.png",
-    )
-}
-
-object EmojiData {
-    val emojis = listOf(
-        "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇",
-        "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚",
-        "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩",
-        "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣",
-        "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬",
-        "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗",
-        "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯",
-        "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐",
-        "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈",
-        "👿", "👹", "👺", "🤡", "💩", "👻", "💀", "☠️", "👽", "👾",
-        "🤖", "🎃", "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿",
-        "😾", "👋", "🤚", "🖐️", "✋", "🖖", "👌", "🤏", "✌️", "🤞",
-        "🤟", "🤘", "🤙", "👈", "👉", "👆", "🖕", "👇", "☝️", "👍",
-        "👎", "✊", "👊", "🤛", "🤜", "👏", "🙌", "👐", "🤲", "🤝",
-        "🙏", "✍️", "💅", "🤳", "💪", "🦾", "🦵", "🦿", "🦶", "👣",
-        "👂", "🦻", "👃", "🧠", "🦷", "🦴", "👀", "👁️", "👅", "👄",
-        "💋", "🩸", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍",
-        "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝"
-    )
 }

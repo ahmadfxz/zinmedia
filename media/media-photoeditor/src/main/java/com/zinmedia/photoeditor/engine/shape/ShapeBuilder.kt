@@ -9,34 +9,34 @@ import androidx.annotation.ColorInt
  * Used to hold a Shape parameters: type, size, opacity and color.
  *
  */
-class ShapeBuilder {
+internal class ShapeBuilder {
 
-    var shapeType: ShapeType = ShapeType.Brush
+    internal var shapeType: ShapeType = ShapeType.Brush
         private set
 
-    var shapeSize: Float = DEFAULT_SHAPE_SIZE
+    internal var shapeSize: Float = DEFAULT_SHAPE_SIZE
         private set
 
     @androidx.annotation.IntRange(from = 0, to = 255)
-    var shapeOpacity: Int? = DEFAULT_SHAPE_OPACITY
+    internal var shapeOpacity: Int? = DEFAULT_SHAPE_OPACITY
         private set
 
     @get:ColorInt
     @ColorInt
-    var shapeColor: Int = DEFAULT_SHAPE_COLOR
+    internal var shapeColor: Int = DEFAULT_SHAPE_COLOR
         private set
 
-    fun withShapeType(shapeType: ShapeType): ShapeBuilder {
+    internal fun withShapeType(shapeType: ShapeType): ShapeBuilder {
         this.shapeType = shapeType
         return this
     }
 
-    fun withShapeSize(size: Float): ShapeBuilder {
+    internal fun withShapeSize(size: Float): ShapeBuilder {
         shapeSize = size
         return this
     }
 
-    fun withShapeOpacity(
+    internal fun withShapeOpacity(
         @androidx.annotation.IntRange(
             from = 0,
             to = 255
@@ -46,15 +46,15 @@ class ShapeBuilder {
         return this
     }
 
-    fun withShapeColor(@ColorInt color: Int): ShapeBuilder {
+    internal fun withShapeColor(@ColorInt color: Int): ShapeBuilder {
         shapeColor = color
         return this
     }
 
-    companion object {
-        const val DEFAULT_SHAPE_SIZE = 25.0f
-        val DEFAULT_SHAPE_OPACITY = null
-        const val DEFAULT_SHAPE_COLOR = Color.BLACK
+    internal companion object {
+        internal const val DEFAULT_SHAPE_SIZE = 25.0f
+        internal val DEFAULT_SHAPE_OPACITY = null
+        internal const val DEFAULT_SHAPE_COLOR = Color.BLACK
     }
 
 }

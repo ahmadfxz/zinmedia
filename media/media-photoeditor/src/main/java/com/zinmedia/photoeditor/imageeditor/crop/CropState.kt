@@ -1,5 +1,6 @@
 package com.zinmedia.photoeditor.imageeditor.crop
 
+import com.zinmedia.photoeditor.R
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import androidx.compose.ui.geometry.Rect
@@ -8,9 +9,9 @@ import kotlin.math.roundToInt
 internal val FullRect = Rect(0f, 0f, 1f, 1f)
 
 /** Pilihan rasio crop. [ratio] = lebar/tinggi; `null` = bebas, [Original] mengikuti gambar. */
-internal enum class CropAspect(val label: String, val ratio: Float?) {
-    Free("Bebas", null),
-    Original("Asli", null),
+internal enum class CropAspect(val label: String, val ratio: Float?, val labelRes: Int? = null) {
+    Free("", null, R.string.zm_aspect_free),
+    Original("", null, R.string.zm_aspect_original),
     Square("1:1", 1f),
     Portrait4x5("4:5", 4f / 5f),
     Portrait3x4("3:4", 3f / 4f),

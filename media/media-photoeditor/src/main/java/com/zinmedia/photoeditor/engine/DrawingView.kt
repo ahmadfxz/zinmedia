@@ -24,7 +24,7 @@ import java.util.*
  * @version 0.1.1
  * @since 12/1/18
  */
-class DrawingView @JvmOverloads constructor(
+internal class DrawingView @JvmOverloads constructor(
     context: Context?,
     attrs: AttributeSet? = null,
     defStyle: Int = 0
@@ -32,14 +32,14 @@ class DrawingView @JvmOverloads constructor(
     private val drawShapes = Stack<ShapeAndPaint?>()
     private val redoShapes = Stack<ShapeAndPaint?>()
     internal var currentShape: ShapeAndPaint? = null
-    var isDrawingEnabled = false
+    internal var isDrawingEnabled = false
         private set
     private var viewChangeListener: BrushViewChangeListener? = null
-    var currentShapeBuilder: ShapeBuilder
+    internal var currentShapeBuilder: ShapeBuilder
 
     // eraser parameters
     private var isErasing = false
-    var eraserSize = DEFAULT_ERASER_SIZE
+    internal var eraserSize = DEFAULT_ERASER_SIZE
 
     // endregion
     private fun createPaint(): Paint {
@@ -70,13 +70,13 @@ class DrawingView @JvmOverloads constructor(
         return paint
     }
 
-    fun clearAll() {
+    internal fun clearAll() {
         drawShapes.clear()
         redoShapes.clear()
         invalidate()
     }
 
-    fun setBrushViewChangeListener(brushViewChangeListener: BrushViewChangeListener?) {
+    internal fun setBrushViewChangeListener(brushViewChangeListener: BrushViewChangeListener?) {
         viewChangeListener = brushViewChangeListener
     }
 
@@ -160,7 +160,6 @@ class DrawingView @JvmOverloads constructor(
         if (currentShape?.shape?.hasBeenTapped() == true) {
             // just a tap, this is not a shape, so remove it
             drawShapes.remove(currentShape)
-            //handleTap(touchX, touchY);
         }
         viewChangeListener?.apply {
             onStopDrawing()
@@ -171,7 +170,7 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    fun undo(): Boolean {
+    internal fun undo(): Boolean {
         if (!drawShapes.empty()) {
             redoShapes.push(drawShapes.pop())
             invalidate()
@@ -180,7 +179,7 @@ class DrawingView @JvmOverloads constructor(
         return !drawShapes.empty()
     }
 
-    fun redo(): Boolean {
+    internal fun redo(): Boolean {
         if (!redoShapes.empty()) {
             drawShapes.push(redoShapes.pop())
             invalidate()
@@ -190,7 +189,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     // region eraser
-    fun brushEraser() {
+    internal fun brushEraser() {
         isDrawingEnabled = true
         isErasing = true
     }
@@ -198,7 +197,7 @@ class DrawingView @JvmOverloads constructor(
     // endregion
     // region Setters/Getters
 
-    fun enableDrawing(brushDrawMode: Boolean) {
+    internal fun enableDrawing(brushDrawMode: Boolean) {
         isDrawingEnabled = brushDrawMode
         isErasing = !brushDrawMode
         if (brushDrawMode) {
@@ -207,16 +206,15 @@ class DrawingView @JvmOverloads constructor(
     }
 
     // endregion
-    val drawingPath: Pair<Stack<ShapeAndPaint?>, Stack<ShapeAndPaint?>>
+    internal val drawingPath: Pair<Stack<ShapeAndPaint?>, Stack<ShapeAndPaint?>>
         get() = Pair(drawShapes, redoShapes)
 
-    companion object {
-        const val DEFAULT_ERASER_SIZE = 50.0f
+    internal companion object {
+        internal const val DEFAULT_ERASER_SIZE = 50.0f
     }
 
     // region constructors
     init {
-        //Caution: This line is to disable hardware acceleration to make eraser feature work properly
         setLayerType(LAYER_TYPE_HARDWARE, null)
         visibility = GONE
         currentShapeBuilder = ShapeBuilder()

@@ -1,6 +1,6 @@
 package com.zinmedia.videoeditor.data.repository
 
-
+import androidx.core.graphics.scale
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
@@ -13,9 +13,10 @@ import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Size
 import androidx.media3.effect.BitmapOverlay
+import androidx.media3.effect.MatrixTransformation
 import androidx.media3.effect.OverlayEffect
-import androidx.media3.effect.Presentation
 import androidx.media3.effect.SingleColorLut
 import androidx.media3.effect.StaticOverlaySettings
 import androidx.media3.effect.TextOverlay
@@ -33,7 +34,6 @@ import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
 import com.google.common.collect.ImmutableList
-import com.zinmedia.videoeditor.core.helper.createOverlaySpannable
 import com.zinmedia.videoeditor.core.helper.loadLutCubeFromUrl
 import com.zinmedia.videoeditor.data.Overlay
 import kotlinx.coroutines.CoroutineScope
@@ -44,7 +44,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.min
 
-fun resizeBitmap(
+internal fun resizeBitmap(
     bitmap: Bitmap,
     maxSize: Int = 300
 ): ImageBitmap {
@@ -56,15 +56,14 @@ fun resizeBitmap(
     val width = (bitmap.width * ratio).toInt()
     val height = (bitmap.height * ratio).toInt()
 
-    val resizedBitmap = Bitmap.createScaledBitmap(bitmap, width, height, true)
+    val resizedBitmap = bitmap.scale(width, height)
 
     return resizedBitmap.asImageBitmap()
 }
 
+internal class VideoRepository {
 
-class VideoRepository {
-
-    suspend fun loadSticker(
+    internal suspend fun loadSticker(
         context: Context,
         url: String,
         posXpx: Float,
@@ -78,15 +77,11 @@ class VideoRepository {
             .allowHardware(false)
             .build()
         val result = loader.execute(request)
-//        val drawable = (result as? SuccessResult)?.image
-//            ?: throw IllegalArgumentException("Gagal memuat stiker")
-//        val bitmap = (drawable as BitmapDrawable).bitmap
         val bitmap = (result as? SuccessResult)
             ?.image
             ?.toBitmap()                      // ← gunakan ini
             ?: throw IllegalArgumentException("Gagal memuat stiker")
         Overlay(
-            type = Overlay.Type.STICKER,
             bitmap = resizeBitmap(bitmap),
             posXpx = posXpx,
             posYpx = posYpx,
@@ -96,13 +91,14 @@ class VideoRepository {
     }
 
     @UnstableApi
-    suspend fun exportVideo(
+    internal suspend fun exportVideo(
         context: Context,
         uri: Uri,
         audioUrl: Uri?,
         startMs: Long,
         endMs: Long,
         overlays: List<Overlay>,
+        canvasLimit: Pair<Float, Float>?,
         cubeUrl: String,
         cacheDir: File,
         outputFile: File? = null,
@@ -142,87 +138,51 @@ class VideoRepository {
 
             val video = EditedMediaItem.Builder(videoMediaItem)
                 .setRemoveAudio(audioItem != null)
-            //.build()
 
             val videoEffects = mutableListOf<Effect>()
-            //UKURAN
-            val maxWidth = 720
-            val maxHeight = 1280
-
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(context, uri)
-
-            val sourceWidth = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
-            )!!.toInt()
-
-            val sourceHeight = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
-            )!!.toInt()
-
-            retriever.release()
-
-            val scale = minOf(
-                maxWidth.toFloat() / sourceWidth,
-                maxHeight.toFloat() / sourceHeight,
-                1f // jangan perbesar video kecil
+            // Ukuran tampil video (metadata rotasi diperhitungkan).
+            val (displayWidth, displayHeight) = readDisplaySize(context, uri)
+            val heightRatio = if (displayWidth > 0 && displayHeight > 0) displayHeight.toFloat() / displayWidth else 16f / 9f
+            // Kanvas = frame video + overlay yang keluar frame (area tambahan hitam), dibatasi area editor.
+            val canvas = exportCanvas(
+                boxes = overlays.map { it.toBox() },
+                heightRatio = heightRatio,
+                limit = canvasLimit,
+            )
+            val baseWidth = if (displayWidth > 0) displayWidth else MAX_SHORT_SIDE
+            val (targetWidth, targetHeight) = fitExportSize(
+                (canvas.width * baseWidth).toInt(),
+                (canvas.height * baseWidth).toInt(),
             )
 
-            val targetWidth = (sourceWidth * scale).toInt()
-            val targetHeight = (sourceHeight * scale).toInt()
+            // Filter warna hanya untuk video, sebelum ditempatkan di kanvas.
+            loadLutCubeFromUrl(cubeUrl)?.let { videoEffects.add(SingleColorLut.createFromCube(it)) }
+            videoEffects.add(CanvasPlacement(targetWidth, targetHeight, canvas, heightRatio))
 
-            val presentation = Presentation.createForWidthAndHeight(
-                targetWidth,
-                targetHeight,
-                Presentation.LAYOUT_SCALE_TO_FIT
-            )
-
-            videoEffects.add(presentation)
-            //UKURAN
-
-            // Convert overlays
+            // Overlay ditempatkan relatif terhadap kanvas; ukurannya dari lebar relatif di preview.
             val textureOverlays = overlays.map { overlay ->
-                StaticOverlaySettings.Builder()
-                    .setScale(overlay.scale, overlay.scale)
-                    .setRotationDegrees(overlay.rotation)
-                    .setBackgroundFrameAnchor(overlay.posXpx, overlay.posYpx)
-                    .build().let { setting ->
-                        when (overlay.type) {
-                            Overlay.Type.TEXT -> TextOverlay.createStaticTextOverlay(
-                                createOverlaySpannable(
-                                    overlay.text ?: "",
-                                    overlay.color.toArgb(),
-                                    overlay.bgcolor.toArgb(),
-                                    overlay.typeface,
-                                    20
-                                ), setting
-                            )
-
-                            Overlay.Type.STICKER -> BitmapOverlay.createStaticBitmapOverlay(
-                                overlay.bitmap!!.asAndroidBitmap(), setting
-                            )
-                        }
-                    }
-            }
-
-            val lutCube = loadLutCubeFromUrl(cubeUrl)
-            lutCube?.let {
-                videoEffects.add(SingleColorLut.createFromCube(it))
+                val bitmap = overlay.bitmap.asAndroidBitmap()
+                val overlayScale = if (overlay.widthFraction > 0f) {
+                    overlay.widthFraction / canvas.width * targetWidth / bitmap.width
+                } else {
+                    overlay.scale
+                }
+                val (anchorX, anchorY) = canvas.toNdc(
+                    (overlay.posXpx + 1f) / 2f,
+                    (1f - overlay.posYpx) / 2f * heightRatio,
+                )
+                BitmapOverlay.createStaticBitmapOverlay(
+                    bitmap,
+                    StaticOverlaySettings.Builder()
+                        .setScale(overlayScale, overlayScale)
+                        .setRotationDegrees(overlay.rotation)
+                        .setBackgroundFrameAnchor(anchorX, anchorY)
+                        .build(),
+                )
             }
             videoEffects.add(OverlayEffect(textureOverlays))
 
             video.setEffects(Effects(emptyList(), videoEffects))
-
-//            val videoSequence = EditedMediaItemSequence(
-//                video.build()
-//            )
-
-//            val composition = audioItem?.let {
-//                val audioSeq = EditedMediaItemSequence(
-//                    ImmutableList.of(EditedMediaItem.Builder(it).setRemoveVideo(true).build())
-//                )
-//                Composition.Builder(videoSequence, audioSeq).build()
-//            } ?: Composition.Builder(videoSequence).build()
 
             val videoSequence = EditedMediaItemSequence.Builder(
                 video.build()
@@ -277,5 +237,71 @@ class VideoRepository {
         } catch (e: Exception) {
             resultCallback(null, e)
         }
+    }
+}
+
+private fun Overlay.toBox(): OverlayBox = OverlayBox(
+    anchorX = posXpx,
+    anchorY = posYpx,
+    widthFraction = widthFraction,
+    aspect = bitmap.height.toFloat() / bitmap.width.coerceAtLeast(1),
+    rotationDegrees = rotation,
+)
+
+/**
+ * Menempatkan frame video di posisinya dalam [canvas] berukuran [width]×[height]; sisa kanvas hitam.
+ */
+@UnstableApi
+private class CanvasPlacement(
+    private val width: Int,
+    private val height: Int,
+    canvas: CanvasRect,
+    heightRatio: Float,
+) : MatrixTransformation {
+    private val matrix = android.graphics.Matrix().apply {
+        // NDC frame video -> NDC kanvas.
+        val (centerX, centerY) = canvas.toNdc(0.5f, heightRatio / 2f)
+        setScale(1f / canvas.width, heightRatio / canvas.height)
+        postTranslate(centerX, centerY)
+    }
+
+    override fun configure(inputWidth: Int, inputHeight: Int): Size = Size(width, height)
+
+    override fun getMatrix(presentationTimeUs: Long): android.graphics.Matrix = matrix
+}
+
+/** Batas ukuran video hasil ekspor (sisi panjang × sisi pendek). */
+private const val MAX_LONG_SIDE = 1280
+private const val MAX_SHORT_SIDE = 720
+private const val ALIGNMENT = 16
+
+/**
+ * Ukuran video hasil ekspor untuk video tampil berukuran [width]×[height]: muat dalam
+ * 1280×720 (sesuai orientasi), tidak diperbesar, dan kelipatan 16. Encoder umumnya membulatkan
+ * ke kelipatan 16; bila tidak sudah pas, Media3 menambah garis hitam tipis di tepi.
+ */
+internal fun fitExportSize(width: Int, height: Int): Pair<Int, Int> {
+    if (width <= 0 || height <= 0) return MAX_SHORT_SIDE to MAX_LONG_SIDE
+    val landscape = width > height
+    val maxW = if (landscape) MAX_LONG_SIDE else MAX_SHORT_SIDE
+    val maxH = if (landscape) MAX_SHORT_SIDE else MAX_LONG_SIDE
+    val scale = minOf(maxW.toFloat() / width, maxH.toFloat() / height, 1f)
+    fun aligned(v: Float) = (v.toInt() / ALIGNMENT * ALIGNMENT).coerceAtLeast(ALIGNMENT)
+    return aligned(width * scale) to aligned(height * scale)
+}
+
+/** Lebar×tinggi video sebagaimana tampil (ditukar bila metadata rotasi 90°/270°). */
+internal fun readDisplaySize(context: android.content.Context, uri: android.net.Uri): Pair<Int, Int> {
+    val retriever = android.media.MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(context, uri)
+        val w = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+        val h = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+        val rotation = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+        if (rotation == 90 || rotation == 270) h to w else w to h
+    } catch (e: Exception) {
+        0 to 0
+    } finally {
+        retriever.release()
     }
 }

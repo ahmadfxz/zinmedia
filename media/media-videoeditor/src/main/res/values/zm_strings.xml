@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="zm_close">Tutup</string>
+    <string name="zm_done">Selesai</string>
+    <string name="zm_filter">Filter</string>
+    <string name="zm_caption_hint">Tambahkan keterangan…</string>
+    <string name="zm_emoji">Emoji</string>
+    <string name="zm_send">Kirim</string>
+    <string name="zm_discard_title">Buang perubahan?</string>
+    <string name="zm_discard_message">Hasil edit dan keterangan yang belum dikirim akan hilang.</string>
+    <string name="zm_cancel">Batal</string>
+    <string name="zm_discard">Buang</string>
+    <string name="zm_tab_emoji">Emoji</string>
+    <string name="zm_tab_sticker">Stiker</string>
+    <string name="zm_sticker">Stiker</string>
+    <string name="zm_text">Teks</string>
+    <string name="zm_draw">Gambar</string>
+    <string name="zm_type_text">Ketik teks</string>
+    <string name="zm_undo">Urungkan</string>
+    <string name="zm_eraser">Penghapus</string>
+    <string name="zm_pen">Pena</string>
+    <string name="zm_filter_original">Asli</string>
+    <string name="zm_recipient_default">Status</string>
+    <string name="zm_text_background">Latar teks</string>
+    <string name="zm_neon">Neon</string>
+    <string name="zm_text_align">Perataan teks</string>
+</resources>

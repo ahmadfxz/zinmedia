@@ -10,7 +10,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
-class LineShape(
+internal class LineShape(
     context: Context,
     private val pointerLocation: ArrowPointerLocation? = null
 ) : AbstractShape("LineShape") {
@@ -21,7 +21,6 @@ class LineShape(
     private var lastY = 0f
 
     override fun startShape(x: Float, y: Float) {
-        Log.d(tag, "startShape@ $x,$y")
         left = x
         top = y
     }
@@ -82,7 +81,6 @@ class LineShape(
     }
 
     override fun stopShape() {
-        Log.d(tag, "stopShape")
     }
 
     private companion object {

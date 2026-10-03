@@ -1,5 +1,6 @@
 package com.zinmedia.photoeditor.ui.theme
 
+import androidx.annotation.RestrictTo
 import android.app.Activity
 import android.os.Build
 import androidx.compose.material3.MaterialTheme
@@ -32,8 +33,9 @@ private val LightColorScheme = lightColorScheme(
     */
 )
 
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 @Composable
-fun MarketplaceTheme(
+public fun MarketplaceTheme(
     darkTheme: Boolean = true,
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false,

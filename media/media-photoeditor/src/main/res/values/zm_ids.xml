@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tag view: data lapisan teks pada grafik teks. -->
+    <item name="zm_tag_text_layer" type="id" />
+</resources>

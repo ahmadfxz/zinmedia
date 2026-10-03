@@ -1,6 +1,6 @@
 package com.zinmedia.photoeditor.engine
 
-data class TextShadow(
+internal data class TextShadow(
     var radius: Float,
     var dx: Float,
     var dy: Float,

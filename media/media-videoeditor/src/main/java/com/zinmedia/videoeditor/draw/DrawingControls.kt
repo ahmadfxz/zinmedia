@@ -1,5 +1,6 @@
 package com.zinmedia.videoeditor.draw
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -25,8 +26,9 @@ import com.zinmedia.videoeditor.ui.VerticalSizePicker
  * slider ukuran di kiri, dan pilihan kuas di bawah.
  */
 @Composable
-fun DrawingControls(
+internal fun DrawingControls(
     viewModel: DrawingViewModel,
+    outputSize: () -> Pair<Int, Int>,
     onDoneDraw: (Bitmap) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -44,12 +46,13 @@ fun DrawingControls(
                 )
             )
         }
+        val (outputWidth, outputHeight) = outputSize()
         val bitmap = renderPathsToBitmap(
             allPaths,
             uiState.canvasSize.width,
             uiState.canvasSize.height,
-            OutputWidth,
-            OutputHeight
+            outputWidth,
+            outputHeight
         )
         onDoneDraw(bitmap)
         viewModel.setDrawingEnabled(false)
@@ -62,7 +65,7 @@ fun DrawingControls(
         EditorTopBar(
             onClose = { viewModel.undo() },
             closeIcon = R.drawable.zm_ic_undo,
-            closeDescription = "Urungkan",
+            closeDescription = stringResource(R.string.zm_undo),
             closeEnabled = uiState.paths.isNotEmpty(),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
@@ -95,25 +98,22 @@ fun DrawingControls(
         ) {
             EditorIconButton(
                 icon = R.drawable.zm_ic_pen,
-                contentDescription = "Pena",
+                contentDescription = stringResource(R.string.zm_pen),
                 selected = uiState.brushStyle == BrushStyle.Pen,
                 onClick = { viewModel.setBrushStyle(BrushStyle.Pen) },
             )
             EditorIconButton(
-                icon = R.drawable.ic_neon,
-                contentDescription = "Neon",
+                icon = R.drawable.zm_ic_neon,
+                contentDescription = stringResource(R.string.zm_neon),
                 selected = uiState.brushStyle == BrushStyle.Neon,
                 onClick = { viewModel.setBrushStyle(BrushStyle.Neon) },
             )
             EditorIconButton(
-                icon = R.drawable.ic_eraser,
-                contentDescription = "Penghapus",
+                icon = R.drawable.zm_ic_eraser,
+                contentDescription = stringResource(R.string.zm_eraser),
                 selected = uiState.brushStyle == BrushStyle.Eraser,
                 onClick = { viewModel.setBrushStyle(BrushStyle.Eraser) },
             )
         }
     }
 }
-
-private const val OutputWidth = 720
-private const val OutputHeight = 1280

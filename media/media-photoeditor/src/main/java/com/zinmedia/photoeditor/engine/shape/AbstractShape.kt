@@ -5,7 +5,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 
-abstract class AbstractShape(protected val tag: String) : Shape {
+internal abstract class AbstractShape(protected val tag: String) : Shape {
     protected var path = Path()
     protected var left = 0f
     protected var top = 0f
@@ -23,7 +23,7 @@ abstract class AbstractShape(protected val tag: String) : Shape {
             return bounds
         }
 
-    fun hasBeenTapped(): Boolean {
+    internal fun hasBeenTapped(): Boolean {
         val bounds = bounds
         return bounds.top < TOUCH_TOLERANCE && bounds.bottom < TOUCH_TOLERANCE && bounds.left < TOUCH_TOLERANCE && bounds.right < TOUCH_TOLERANCE
     }
@@ -36,7 +36,7 @@ abstract class AbstractShape(protected val tag: String) : Shape {
                 " - bottom: " + bottom
     }
 
-    companion object {
-        const val TOUCH_TOLERANCE = 4f
+    internal companion object {
+        internal const val TOUCH_TOLERANCE = 4f
     }
 }

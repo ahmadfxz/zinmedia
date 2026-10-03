@@ -1,5 +1,6 @@
 package com.zinmedia.photoeditor.engine
 
+import androidx.core.view.isVisible
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
@@ -22,7 +23,7 @@ import com.zinmedia.photoeditor.engine.FilterImageView.OnImageChangedListener
  * @version 0.1.1
  * @since 1/18/2018
  */
-class PhotoEditorView @JvmOverloads constructor(
+internal class PhotoEditorView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyle: Int = 0
@@ -38,7 +39,7 @@ class PhotoEditorView @JvmOverloads constructor(
 
     init {
         //Setup image attributes
-        val sourceParam = setupImageSource(attrs)
+        val sourceParam = setupImageSource()
         //Setup GLSurface attributes
         mImageFilterView = ImageFilterView(context)
         val filterParam = setupFilterView()
@@ -47,7 +48,6 @@ class PhotoEditorView @JvmOverloads constructor(
             override fun onBitmapLoaded(sourceBitmap: Bitmap?) {
                 mImageFilterView.setFilterEffect(PhotoFilter.NONE)
                 mImageFilterView.setSourceBitmap(sourceBitmap)
-                Log.d(TAG, "onBitmapLoaded() called with: sourceBitmap = [$sourceBitmap]")
             }
         })
 
@@ -66,19 +66,10 @@ class PhotoEditorView @JvmOverloads constructor(
         addView(drawingView, brushParam)
     }
 
-    @SuppressLint("Recycle")
-    private fun setupImageSource(attrs: AttributeSet?): LayoutParams {
+    private fun setupImageSource(): LayoutParams {
         mImgSource.id = imgSrcId
         mImgSource.adjustViewBounds = true
         mImgSource.scaleType = ImageView.ScaleType.CENTER_INSIDE
-
-        attrs?.let {
-            val a = context.obtainStyledAttributes(it, R.styleable.PhotoEditorView)
-            val imgSrcDrawable = a.getDrawable(R.styleable.PhotoEditorView_photo_src)
-            if (imgSrcDrawable != null) {
-                mImgSource.setImageDrawable(imgSrcDrawable)
-            }
-        }
 
         var widthParam = ViewGroup.LayoutParams.MATCH_PARENT
         if (clipSourceImage) {
@@ -95,16 +86,8 @@ class PhotoEditorView @JvmOverloads constructor(
         drawingView.visibility = GONE
         drawingView.id = shapeSrcId
 
-        // Align drawing view to the size of image view
-        val params = LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        params.addRule(CENTER_IN_PARENT, TRUE)
-        params.addRule(ALIGN_TOP, imgSrcId)
-        params.addRule(ALIGN_BOTTOM, imgSrcId)
-        params.addRule(ALIGN_LEFT, imgSrcId)
-        params.addRule(ALIGN_RIGHT, imgSrcId)
-        return params
+        // Seluas editor: coretan boleh di luar foto (kanvas ekspor ikut diperluas).
+        return LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
     }
 
     private fun setupFilterView(): LayoutParams {
@@ -126,11 +109,11 @@ class PhotoEditorView @JvmOverloads constructor(
      *
      * @return source ImageView
      */
-    val source: ImageView
+    internal val source: ImageView
         get() = mImgSource
 
     internal suspend fun saveFilter(): Bitmap {
-        return if (mImageFilterView.visibility == VISIBLE) {
+        return if (mImageFilterView.isVisible) {
             val saveBitmap = try {
                 mImageFilterView.saveBitmap()
             } catch (t: Throwable) {
@@ -156,11 +139,11 @@ class PhotoEditorView @JvmOverloads constructor(
 
     internal fun setClipSourceImage(clip: Boolean) {
         clipSourceImage = clip
-        val param = setupImageSource(null)
+        val param = setupImageSource()
         mImgSource.layoutParams = param
     } // endregion
 
-    companion object {
+    internal companion object {
         private const val TAG = "PhotoEditorView"
         private const val imgSrcId = 1
         private const val shapeSrcId = 2

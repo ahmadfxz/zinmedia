@@ -1,9 +1,5 @@
 package com.zinmedia.photoeditor.engine
 
-import android.view.View
-import android.widget.FrameLayout
-import android.widget.ImageView
-import com.zinmedia.photoeditor.R
 
 /**
  * Created by Burhanuddin Rashid on 18/05/21.
@@ -15,13 +11,6 @@ internal class BoxHelper(
     private val mViewState: PhotoEditorViewState
 ) {
     fun clearHelperBox() {
-        for (i in 0 until mPhotoEditorView.childCount) {
-            val childAt = mPhotoEditorView.getChildAt(i)
-            val frmBorder = childAt.findViewById<FrameLayout>(R.id.frmBorder)
-            frmBorder?.setBackgroundResource(0)
-            val imgClose = childAt.findViewById<ImageView>(R.id.imgPhotoEditorClose)
-            imgClose?.visibility = View.GONE
-        }
         mViewState.clearCurrentSelectedView()
     }
 

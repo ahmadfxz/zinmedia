@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.zinmedia.photoeditor"
-    compileSdk = 36
+    compileSdk = 37
+    // Semua resource library berawalan zm_ agar tidak bentrok dengan resource aplikasi.
+    resourcePrefix = "zm_"
 
     defaultConfig {
         minSdk = 23
@@ -19,11 +21,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-    kotlinOptions {
-        jvmTarget = "11"
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         compose = true
@@ -32,6 +31,14 @@ android {
         unitTests {
             isIncludeAndroidResources = true
         }
+    }
+}
+
+kotlin {
+    // API publik harus ditandai eksplisit; selain itu internal.
+    explicitApi()
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 

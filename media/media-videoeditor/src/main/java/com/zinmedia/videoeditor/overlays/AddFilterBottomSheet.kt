@@ -1,6 +1,7 @@
 package com.zinmedia.videoeditor.overlays
 
-import androidx.annotation.Keep
+import com.zinmedia.videoeditor.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,34 +30,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-
-@Keep
-data class FilterEffectItem(
-    val name: String,
-    val cubeUrl: String,
-    val thumbnailUrl: String
-)
-
-private val filtersEffectList = listOf(
-    FilterEffectItem("Vintage",
-        "https://storage.googleapis.com/jualxbeli/cube/a.cube",
-        "https://storage.googleapis.com/jualxbeli/cube/a.jpg"
-    ),
-    FilterEffectItem("Hitam Putih",
-        "https://storage.googleapis.com/jualxbeli/cube/b.cube",
-        "https://storage.googleapis.com/jualxbeli/cube/b.jpg"
-    ),
-    FilterEffectItem("Punch",
-        "https://storage.googleapis.com/jualxbeli/cube/c.cube",
-        "https://storage.googleapis.com/jualxbeli/cube/c.jpg"
-    )
-)
+import com.zinmedia.videoeditor.VideoEditorConfig
+import com.zinmedia.videoeditor.VideoFilterOption
 
 /** Strip filter horizontal, tampilannya sama dengan filter editor foto. "Asli" = tanpa filter. */
 @Composable
-fun AddFilterBottomSheet(
+internal fun AddFilterBottomSheet(
     selectedUrl: String,
-    onFilterClick: (FilterEffectItem) -> Unit
+    onFilterClick: (VideoFilterOption) -> Unit
 ) {
     LazyRow(
         modifier = Modifier
@@ -65,7 +46,7 @@ fun AddFilterBottomSheet(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(horizontal = 16.dp),
     ) {
-        items(listOf(OriginalFilter) + filtersEffectList) { filter ->
+        items(listOf(OriginalFilter) + VideoEditorConfig.filters) { filter ->
             val selected = filter.cubeUrl == selectedUrl
             val shape = RoundedCornerShape(10.dp)
             Column(
@@ -84,7 +65,7 @@ fun AddFilterBottomSheet(
                     if (filter.thumbnailUrl.isNotEmpty()) {
                         AsyncImage(
                             model = filter.thumbnailUrl,
-                            contentDescription = filter.name,
+                            contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
                         )
@@ -92,7 +73,7 @@ fun AddFilterBottomSheet(
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = filter.name,
+                    text = filter.name.ifEmpty { stringResource(R.string.zm_filter_original) },
                     color = if (selected) Color.White else Color.White.copy(alpha = 0.7f),
                     fontSize = 11.sp,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
@@ -103,4 +84,4 @@ fun AddFilterBottomSheet(
     }
 }
 
-private val OriginalFilter = FilterEffectItem(name = "Asli", cubeUrl = "", thumbnailUrl = "")
+private val OriginalFilter = VideoFilterOption(name = "", cubeUrl = "", thumbnailUrl = "")

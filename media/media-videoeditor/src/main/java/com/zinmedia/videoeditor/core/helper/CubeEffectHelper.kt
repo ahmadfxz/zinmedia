@@ -10,77 +10,7 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 
-//
-//fun parseCubeToLutCube(inputStream: InputStream): Array<Array<IntArray>>? {
-//    val reader = BufferedReader(InputStreamReader(inputStream))
-//    val colorValues = mutableListOf<Float>()
-//    var lutSize = 0
-//
-//    var line: String?
-//
-//    try {
-//        while (reader.readLine().also { line = it } != null) {
-//            val trimmed = line!!.trim()
-//
-//            if (trimmed.isEmpty() ||
-//                trimmed.startsWith("#") ||
-//                trimmed.startsWith("TITLE") ||
-//                trimmed.startsWith("DOMAIN_")
-//            ) continue
-//
-//            // Get LUT size
-//            if (trimmed.startsWith("LUT_3D_SIZE")) {
-//                lutSize = trimmed.substringAfter("LUT_3D_SIZE").trim().toInt()
-//                continue
-//            }
-//
-//            // RGB values (float)
-//            val parts = trimmed.split(Regex("\\s+"))
-//            if (parts.size == 3) {
-//                colorValues.add(parts[0].toFloat())
-//                colorValues.add(parts[1].toFloat())
-//                colorValues.add(parts[2].toFloat())
-//            }
-//        }
-//    } catch (e: Exception) {
-//        e.printStackTrace()
-//        return null
-//    }
-//
-//    // Validate
-//    if (lutSize == 0 ||
-//        colorValues.size != lutSize * lutSize * lutSize * 3
-//    ) {
-//        return null
-//    }
-//
-//    // Convert to 3D LUT cube
-//    val lutCube = Array(lutSize) {
-//        Array(lutSize) {
-//            IntArray(lutSize)
-//        }
-//    }
-//
-//    var idx = 0
-//    for (r in 0 until lutSize) {
-//        for (g in 0 until lutSize) {
-//            for (b in 0 until lutSize) {
-//
-//                val rr = (colorValues[idx++] * 255f).toInt().coerceIn(0, 255)
-//                val gg = (colorValues[idx++] * 255f).toInt().coerceIn(0, 255)
-//                val bb = (colorValues[idx++] * 255f).toInt().coerceIn(0, 255)
-//
-//                val argb = (255 shl 24) or (rr shl 16) or (gg shl 8) or bb
-//
-//                lutCube[r][g][b] = argb
-//            }
-//        }
-//    }
-//
-//    return lutCube
-//}
-
-fun parseCubeToLutCube(inputStream: InputStream): Array<Array<IntArray>>? {
+internal fun parseCubeToLutCube(inputStream: InputStream): Array<Array<IntArray>>? {
     val reader = BufferedReader(InputStreamReader(inputStream))
     val colorValues = mutableListOf<Float>()
     var lutSize = 0
@@ -108,7 +38,7 @@ fun parseCubeToLutCube(inputStream: InputStream): Array<Array<IntArray>>? {
             }
         }
     } catch (e: Exception) {
-        e.printStackTrace()
+        android.util.Log.w("CubeEffectHelper", "Gagal memuat LUT", e)
         return null
     }
 
@@ -147,8 +77,7 @@ fun parseCubeToLutCube(inputStream: InputStream): Array<Array<IntArray>>? {
     return lutCube
 }
 
-
-suspend fun loadLutCubeFromUrl(
+internal suspend fun loadLutCubeFromUrl(
     url: String
 ): Array<Array<IntArray>>? = withContext(Dispatchers.IO) {
 
@@ -172,7 +101,7 @@ suspend fun loadLutCubeFromUrl(
         }
 
     } catch (e: Exception) {
-        e.printStackTrace()
+        android.util.Log.w("CubeEffectHelper", "Gagal memuat LUT", e)
         null
     } finally {
         try { input?.close() } catch (_: Exception) {}
@@ -180,8 +109,7 @@ suspend fun loadLutCubeFromUrl(
     }
 }
 
-
-suspend fun loadLutCubeFromUrlSuspend(url: String): Array<Array<IntArray>>? {
+internal suspend fun loadLutCubeFromUrlSuspend(url: String): Array<Array<IntArray>>? {
     return withContext(Dispatchers.IO) {
         try {
             val connection = URL(url).openConnection() as HttpURLConnection
@@ -207,7 +135,7 @@ suspend fun loadLutCubeFromUrlSuspend(url: String): Array<Array<IntArray>>? {
     }
 }
 
-fun createSimpleLutCube(): Array<Array<IntArray>> {
+internal fun createSimpleLutCube(): Array<Array<IntArray>> {
     val size = 2
     val lutCube = Array(size) {
         Array(size) { IntArray(size) }
@@ -225,5 +153,4 @@ fun createSimpleLutCube(): Array<Array<IntArray>> {
     }
     return lutCube
 }
-
 

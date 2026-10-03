@@ -4,12 +4,11 @@ import android.graphics.Path
 import android.util.Log
 import kotlin.math.abs
 
-class RectangleShape : AbstractShape("RectangleShape") {
+internal class RectangleShape : AbstractShape("RectangleShape") {
     private var lastX = 0f
     private var lastY = 0f
 
     override fun startShape(x: Float, y: Float) {
-        Log.d(tag, "startShape@ $x,$y")
         left = x
         top = y
     }
@@ -37,6 +36,5 @@ class RectangleShape : AbstractShape("RectangleShape") {
     }
 
     override fun stopShape() {
-        Log.d(tag, "stopShape")
     }
 }

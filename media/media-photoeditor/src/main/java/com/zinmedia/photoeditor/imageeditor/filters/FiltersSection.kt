@@ -38,49 +38,44 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.zinmedia.photoeditor.PhotoEditorConfig
+import com.zinmedia.photoeditor.PhotoFilterOption
 import com.zinmedia.photoeditor.engine.PhotoFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
-data class FilterItem(
-    val filter: PhotoFilter,
-    val iconPath: String,
-    val name: String
+/** Thumbnail bawaan untuk tiap filter (aset library). */
+private val FilterThumbnails: Map<PhotoFilter, String> = mapOf(
+    PhotoFilter.NONE to "filters/original.webp",
+    PhotoFilter.AUTO_FIX to "filters/auto_fix.webp",
+    PhotoFilter.BRIGHTNESS to "filters/brightness.webp",
+    PhotoFilter.CONTRAST to "filters/contrast.webp",
+    PhotoFilter.DOCUMENTARY to "filters/documentary.webp",
+    PhotoFilter.DUE_TONE to "filters/dual_tone.webp",
+    PhotoFilter.FILL_LIGHT to "filters/fill_light.webp",
+    PhotoFilter.FISH_EYE to "filters/fish_eye.webp",
+    PhotoFilter.GRAIN to "filters/grain.webp",
+    PhotoFilter.GRAY_SCALE to "filters/gray_scale.webp",
+    PhotoFilter.LOMISH to "filters/lomish.webp",
+    PhotoFilter.NEGATIVE to "filters/negative.webp",
+    PhotoFilter.POSTERIZE to "filters/posterize.webp",
+    PhotoFilter.SATURATE to "filters/saturate.webp",
+    PhotoFilter.SEPIA to "filters/sepia.webp",
+    PhotoFilter.SHARPEN to "filters/sharpen.webp",
+    PhotoFilter.TEMPERATURE to "filters/temprature.webp",
+    PhotoFilter.TINT to "filters/tint.webp",
+    PhotoFilter.VIGNETTE to "filters/vignette.webp",
+    PhotoFilter.CROSS_PROCESS to "filters/cross_process.webp",
+    PhotoFilter.BLACK_WHITE to "filters/b_n_w.webp",
+    PhotoFilter.FLIP_HORIZONTAL to "filters/flip_horizental.webp",
+    PhotoFilter.FLIP_VERTICAL to "filters/flip_vertical.webp",
+    PhotoFilter.ROTATE to "filters/rotate.webp",
 )
-
-object FilterData {
-    val filters = listOf(
-        FilterItem(PhotoFilter.NONE, "filters/original.webp", "Asli"),
-        FilterItem(PhotoFilter.AUTO_FIX, "filters/auto_fix.webp", "Auto"),
-        FilterItem(PhotoFilter.BRIGHTNESS, "filters/brightness.webp", "Cerah"),
-        FilterItem(PhotoFilter.CONTRAST, "filters/contrast.webp", "Kontras"),
-        FilterItem(PhotoFilter.DOCUMENTARY, "filters/documentary.webp", "Dokumenter"),
-        FilterItem(PhotoFilter.DUE_TONE, "filters/dual_tone.webp", "Dual Tone"),
-        FilterItem(PhotoFilter.FILL_LIGHT, "filters/fill_light.webp", "Fill Light"),
-        FilterItem(PhotoFilter.FISH_EYE, "filters/fish_eye.webp", "Fish Eye"),
-        FilterItem(PhotoFilter.GRAIN, "filters/grain.webp", "Grain"),
-        FilterItem(PhotoFilter.GRAY_SCALE, "filters/gray_scale.webp", "Abu-abu"),
-        FilterItem(PhotoFilter.LOMISH, "filters/lomish.webp", "Lomo"),
-        FilterItem(PhotoFilter.NEGATIVE, "filters/negative.webp", "Negatif"),
-        FilterItem(PhotoFilter.POSTERIZE, "filters/posterize.webp", "Poster"),
-        FilterItem(PhotoFilter.SATURATE, "filters/saturate.webp", "Saturasi"),
-        FilterItem(PhotoFilter.SEPIA, "filters/sepia.webp", "Sepia"),
-        FilterItem(PhotoFilter.SHARPEN, "filters/sharpen.webp", "Tajam"),
-        FilterItem(PhotoFilter.TEMPERATURE, "filters/temprature.webp", "Hangat"),
-        FilterItem(PhotoFilter.TINT, "filters/tint.webp", "Tint"),
-        FilterItem(PhotoFilter.VIGNETTE, "filters/vignette.webp", "Vignette"),
-        FilterItem(PhotoFilter.CROSS_PROCESS, "filters/cross_process.webp", "Cross"),
-        FilterItem(PhotoFilter.BLACK_WHITE, "filters/b_n_w.webp", "Hitam Putih"),
-        FilterItem(PhotoFilter.FLIP_HORIZONTAL, "filters/flip_horizental.webp", "Balik H"),
-        FilterItem(PhotoFilter.FLIP_VERTICAL, "filters/flip_vertical.webp", "Balik V"),
-        FilterItem(PhotoFilter.ROTATE, "filters/rotate.webp", "Putar"),
-    )
-}
 
 /** Strip filter horizontal: thumbnail + nama, filter aktif diberi bingkai putih. */
 @Composable
-fun FiltersSection(
+internal fun FiltersSection(
     selectedFilter: PhotoFilter,
     filterListener: FilterListener,
     modifier: Modifier = Modifier
@@ -90,11 +85,11 @@ fun FiltersSection(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(horizontal = 12.dp),
     ) {
-        items(FilterData.filters, key = { it.filter }) { item ->
+        items(PhotoEditorConfig.filters, key = { it.filter }) { option ->
             FilterThumbnail(
-                item = item,
-                selected = item.filter == selectedFilter,
-                onClick = { filterListener.onFilterSelected(item.filter) },
+                option = option,
+                selected = option.filter == selectedFilter,
+                onClick = { filterListener.onFilterSelected(option.filter) },
             )
         }
     }
@@ -102,14 +97,16 @@ fun FiltersSection(
 
 @Composable
 private fun FilterThumbnail(
-    item: FilterItem,
+    option: PhotoFilterOption,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(item.iconPath) {
-        bitmap = withContext(Dispatchers.IO) { loadAsset(context, item.iconPath) }
+    LaunchedEffect(option.filter) {
+        bitmap = FilterThumbnails[option.filter]?.let { path ->
+            withContext(Dispatchers.IO) { loadAsset(context, path) }
+        }
     }
     val shape = RoundedCornerShape(10.dp)
 
@@ -129,7 +126,7 @@ private fun FilterThumbnail(
             bitmap?.let {
                 Image(
                     bitmap = it.asImageBitmap(),
-                    contentDescription = item.name,
+                    contentDescription = option.label,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -137,7 +134,7 @@ private fun FilterThumbnail(
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            text = item.name,
+            text = option.label,
             color = if (selected) Color.White else Color.White.copy(alpha = 0.7f),
             fontSize = 11.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,

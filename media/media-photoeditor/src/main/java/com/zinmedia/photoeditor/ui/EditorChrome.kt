@@ -1,5 +1,10 @@
 package com.zinmedia.photoeditor.ui
 
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.layout.imePadding
+import androidx.annotation.RestrictTo
+import androidx.compose.ui.res.stringResource
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -47,14 +52,15 @@ import androidx.compose.ui.window.Dialog
 import com.zinmedia.photoeditor.R
 
 /** Palet warna editor (mode gelap). */
-internal object EditorColors {
-    val Background = Color.Black
-    val Field = Color(0xFF1F2C34)
-    val Accent = Color(0xFF21C063)
-    val IconContainer = Color.Black.copy(alpha = 0.35f)
-    val TextSecondary = Color.White.copy(alpha = 0.6f)
-    val BottomBar = Color.Black.copy(alpha = 0.6f)
-    val Dialog = Color(0xFF233138)
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+public object EditorColors {
+    public val Background: Color = Color.Black
+    public val Field: Color = Color(0xFF1F2C34)
+    public val Accent: Color = Color(0xFF21C063)
+    public val IconContainer: Color = Color.Black.copy(alpha = 0.35f)
+    public val TextSecondary: Color = Color.White.copy(alpha = 0.6f)
+    public val BottomBar: Color = Color.Black.copy(alpha = 0.6f)
+    public val Dialog: Color = Color(0xFF233138)
 }
 
 private val QuickEmojis = listOf(
@@ -72,24 +78,31 @@ internal fun EditorIconButton(
     selected: Boolean = false,
     enabled: Boolean = true,
 ) {
+    // Area sentuh 48dp (minimum aksesibilitas), lingkaran visual 40dp.
     Box(
         modifier = modifier
-            .size(40.dp)
+            .size(48.dp)
             .clip(CircleShape)
-            .background(if (selected) Color.White else EditorColors.IconContainer)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            painter = painterResource(icon),
-            contentDescription = contentDescription,
-            tint = when {
-                selected -> Color.Black
-                enabled -> Color.White
-                else -> Color.White.copy(alpha = 0.35f)
-            },
-            modifier = Modifier.size(22.dp),
-        )
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(if (selected) Color.White else EditorColors.IconContainer, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = contentDescription,
+                tint = when {
+                    selected -> Color.Black
+                    enabled -> Color.White
+                    else -> Color.White.copy(alpha = 0.35f)
+                },
+                modifier = Modifier.size(22.dp),
+            )
+        }
     }
 }
 
@@ -99,7 +112,7 @@ internal fun EditorTopBar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     @DrawableRes closeIcon: Int = R.drawable.zm_ic_close,
-    closeDescription: String = "Tutup",
+    closeDescription: String = stringResource(R.string.zm_close),
     closeEnabled: Boolean = true,
     actions: @Composable RowScope.() -> Unit,
 ) {
@@ -108,9 +121,9 @@ internal fun EditorTopBar(
             .fillMaxWidth()
             .statusBarsPadding()
             .height(56.dp)
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         EditorIconButton(
             icon = closeIcon,
@@ -128,7 +141,7 @@ internal fun EditorTopBar(
 internal fun EditorDoneButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    text: String = "Selesai",
+    text: String = stringResource(R.string.zm_done),
     enabled: Boolean = true,
 ) {
     Box(
@@ -176,7 +189,7 @@ internal fun FilterHint(
             tint = Color.White,
             modifier = Modifier.size(20.dp),
         )
-        Text("Filter", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Text(stringResource(R.string.zm_filter), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -184,20 +197,28 @@ internal fun FilterHint(
  * Bagian bawah editor: kolom keterangan berbentuk pil, lalu bar hitam transparan selebar layar
  * (sampai di belakang navigation bar) berisi chip penerima di kiri dan tombol kirim hijau di kanan.
  */
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 @Composable
-internal fun EditorCaptionBar(
+public fun EditorCaptionBar(
     caption: String,
     onCaptionChange: (String) -> Unit,
     recipientLabel: String,
     sendEnabled: Boolean,
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Tambahkan keterangan...",
+    placeholder: String = stringResource(R.string.zm_caption_hint),
 ) {
     val focusManager = LocalFocusManager.current
     var showEmojis by rememberSaveable { mutableStateOf(false) }
+    var captionFocused by remember { mutableStateOf(false) }
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    // Ikut naik hanya untuk keyboard milik kolom keterangan ini, bukan keyboard mode teks
+    // (atau sisa animasinya saat mode teks ditutup).
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (captionFocused) Modifier.imePadding() else Modifier)
+    ) {
         Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 10.dp)) {
             AnimatedVisibility(visible = showEmojis) {
                 LazyRow(
@@ -239,7 +260,7 @@ internal fun EditorCaptionBar(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.zm_ic_emoji),
-                        contentDescription = "Emoji",
+                        contentDescription = stringResource(R.string.zm_emoji),
                         tint = if (showEmojis) EditorColors.Accent else EditorColors.TextSecondary,
                         modifier = Modifier.size(24.dp),
                     )
@@ -250,7 +271,8 @@ internal fun EditorCaptionBar(
                     onValueChange = { onCaptionChange(it.take(MaxCaptionLength)) },
                     modifier = Modifier
                         .weight(1f)
-                        .padding(vertical = 12.dp),
+                        .padding(vertical = 12.dp)
+                        .onFocusChanged { captionFocused = it.isFocused },
                     maxLines = 4,
                     cursorBrush = SolidColor(EditorColors.Accent),
                     textStyle = TextStyle(color = Color.White, fontSize = 16.sp, lineHeight = 21.sp),
@@ -306,7 +328,7 @@ internal fun EditorCaptionBar(
             ) {
                 Icon(
                     painter = painterResource(R.drawable.zm_ic_send),
-                    contentDescription = "Kirim",
+                    contentDescription = stringResource(R.string.zm_send),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp),
                 )
@@ -356,8 +378,9 @@ internal fun TrayTabs(
  * Dialog konfirmasi saat menutup editor yang sudah diubah:
  * kartu gelap membulat, judul + penjelasan, dan tombol teks hijau di kanan bawah.
  */
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 @Composable
-internal fun DiscardChangesDialog(
+public fun DiscardChangesDialog(
     onDiscard: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -369,10 +392,10 @@ internal fun DiscardChangesDialog(
                 .background(EditorColors.Dialog)
                 .padding(start = 24.dp, end = 12.dp, top = 24.dp, bottom = 8.dp),
         ) {
-            Text("Buang perubahan?", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.zm_discard_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(12.dp))
             Text(
-                "Hasil edit dan keterangan yang belum dikirim akan hilang.",
+                stringResource(R.string.zm_discard_message),
                 color = EditorColors.TextSecondary,
                 fontSize = 15.sp,
                 lineHeight = 21.sp,
@@ -383,8 +406,8 @@ internal fun DiscardChangesDialog(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
             ) {
-                DialogTextButton("Batal", onDismiss)
-                DialogTextButton("Buang", onDiscard)
+                DialogTextButton(stringResource(R.string.zm_cancel), onDismiss)
+                DialogTextButton(stringResource(R.string.zm_discard), onDiscard)
             }
         }
     }

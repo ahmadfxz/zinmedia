@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,56 +31,66 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.zinmedia.photoeditor.R
 import com.zinmedia.photoeditor.domain.model.FontItem
+import com.zinmedia.photoeditor.textlayer.TextLayer
+import com.zinmedia.photoeditor.textlayer.TextLayerAlign
+import com.zinmedia.photoeditor.textlayer.TextLayerBackground
+import com.zinmedia.photoeditor.textlayer.TextLayerMetrics
+import com.zinmedia.photoeditor.textlayer.glyphMetrics
+import com.zinmedia.photoeditor.textlayer.textLayerBackground
+import com.zinmedia.photoeditor.textlayer.textLayerStyle
 import com.zinmedia.photoeditor.ui.EditorColors
 import com.zinmedia.photoeditor.ui.EditorDoneButton
+import com.zinmedia.photoeditor.ui.EditorIconButton
 import com.zinmedia.photoeditor.ui.EditorTopBar
 import com.zinmedia.photoeditor.ui.VerticalColorPicker
 
-/** Latar teks yang bisa diputar lewat tombol "A": tanpa latar lalu beberapa warna. */
-private val TextBackgrounds = listOf(
-    Color.Transparent,
-    Color.White,
-    Color.Black,
-    Color(0xFFE53935),
-    Color(0xFF1E88E5),
-    Color(0xFFFFA000),
-)
-
 /**
- * Mode teks: layar diredupkan, teks besar di tengah, slider warna di kanan,
- * dan pilihan latar + font di atas keyboard.
+ * Mode teks: layar diredupkan, teks besar di tengah, slider warna di kanan, perataan & gaya latar
+ * di atas, dan pilihan font di atas keyboard. Tampilan latar & susunan baris di sini identik dengan
+ * hasil akhir (lihat [com.zinmedia.photoeditor.textlayer.renderTextLayer]).
+ *
+ * @param onDone dipanggil dengan lapisan teks dan lebar kolom teks (px) untuk render hasil.
  */
 @Composable
-fun TextEditorDialog(
-    initialText: String = "",
-    initialColor: Color = Color.White,
+internal fun TextEditorDialog(
+    initial: TextLayer,
     fonts: List<FontItem>,
-    initialBackgroundColor: Color,
     onDismissRequest: () -> Unit,
-    onTextEdited: (String, Color, Int, Int) -> Unit
+    onDone: (layer: TextLayer, layoutWidthPx: Int) -> Unit,
 ) {
-    var text by remember { mutableStateOf(initialText) }
-    var textColor by remember { mutableStateOf(initialColor) }
-    var fontIndex by remember { mutableIntStateOf(0) }
-    var backgroundIndex by remember {
-        mutableIntStateOf(TextBackgrounds.indexOf(initialBackgroundColor).coerceAtLeast(0))
+    var value by remember {
+        mutableStateOf(TextFieldValue(initial.text, selection = TextRange(initial.text.length)))
     }
-    val background = TextBackgrounds[backgroundIndex]
+    var color by remember { mutableIntStateOf(initial.color) }
+    var background by remember { mutableStateOf(initial.background) }
+    var align by remember { mutableStateOf(initial.align) }
+    var fontIndex by remember { mutableIntStateOf(initial.fontIndex) }
+    var layoutWidthPx by remember { mutableIntStateOf(0) }
+    var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+
+    val layer = TextLayer(value.text, color, background, align, fontIndex)
     val fontFamily = fonts.getOrNull(fontIndex)?.typeface?.let { FontFamily(it) }
 
     val focusRequester = remember { FocusRequester() }
@@ -94,11 +103,17 @@ fun TextEditorDialog(
     }
 
     fun done() {
-        if (text.isNotBlank()) {
-            onTextEdited(text, background, contrastTextColor(textColor, background).toArgb(), fontIndex)
-        }
+        if (value.text.isNotBlank() && layoutWidthPx > 0) onDone(layer, layoutWidthPx)
         dismiss()
     }
+
+    val density = LocalDensity.current
+    val typeface = fonts.getOrNull(fontIndex)?.typeface
+    val glyphs = remember(typeface, density) {
+        glyphMetrics(typeface, with(density) { TextLayerMetrics.FontSize.toPx() })
+    }
+    // Gaya yang sama persis dengan renderer hasil (lihat renderTextLayer).
+    val textStyle = textLayerStyle(layer, fontFamily, glyphs, density)
 
     Dialog(
         onDismissRequest = ::dismiss,
@@ -116,10 +131,16 @@ fun TextEditorDialog(
         ) {
             Column(Modifier.fillMaxSize()) {
                 EditorTopBar(onClose = ::dismiss) {
+                    EditorIconButton(
+                        icon = align.icon(),
+                        contentDescription = stringResource(R.string.zm_text_align),
+                        onClick = { align = TextLayerAlign.entries[(align.ordinal + 1) % TextLayerAlign.entries.size] },
+                    )
                     TextBackgroundButton(
                         background = background,
-                        textColor = textColor,
-                        onClick = { backgroundIndex = (backgroundIndex + 1) % TextBackgrounds.size },
+                        onClick = {
+                            background = TextLayerBackground.entries[(background.ordinal + 1) % TextLayerBackground.entries.size]
+                        },
                     )
                     EditorDoneButton(onClick = ::done)
                 }
@@ -131,29 +152,29 @@ fun TextEditorDialog(
                         .padding(start = 24.dp, end = 64.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val style = TextStyle(
-                        color = contrastTextColor(textColor, background),
-                        fontSize = 30.sp,
-                        lineHeight = 38.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        fontFamily = fontFamily,
-                        background = background,
-                    )
                     BasicTextField(
-                        value = text,
-                        onValueChange = { text = it },
+                        value = value,
+                        onValueChange = { value = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .focusRequester(focusRequester),
-                        textStyle = style,
-                        cursorBrush = SolidColor(EditorColors.Accent),
+                            .onSizeChanged { layoutWidthPx = it.width }
+                            .focusRequester(focusRequester)
+                            .drawBehind {
+                                val layout = textLayout
+                                if (layer.backgroundColor != null && layout != null && value.text.isNotEmpty()) {
+                                    drawPath(textLayerBackground(layout, glyphs, density), Color(layer.backgroundColor!!))
+                                }
+                            },
+                        textStyle = textStyle,
+                        onTextLayout = { textLayout = it },
+                        cursorBrush = SolidColor(if (background == TextLayerBackground.None) EditorColors.Accent else Color(layer.textColor)),
                         decorationBox = { inner ->
-                            Box(contentAlignment = Alignment.Center) {
-                                if (text.isEmpty()) {
+                            Box {
+                                if (value.text.isEmpty()) {
                                     Text(
-                                        "Ketik teks",
-                                        style = style.copy(color = Color.White.copy(alpha = 0.5f), background = Color.Transparent),
+                                        text = stringResource(R.string.zm_type_text),
+                                        style = textStyle.copy(color = Color.White.copy(alpha = 0.5f)),
+                                        modifier = Modifier.fillMaxWidth(),
                                     )
                                 }
                                 inner()
@@ -174,8 +195,8 @@ fun TextEditorDialog(
             }
 
             VerticalColorPicker(
-                onColorChange = { textColor = it },
-                colorThumb = textColor,
+                onColorChange = { color = it.toArgb() },
+                colorThumb = Color(color),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 120.dp, end = 10.dp),
@@ -184,30 +205,40 @@ fun TextEditorDialog(
     }
 }
 
-/** Tombol "A" dalam kotak: menampilkan gaya latar teks yang aktif. */
+/** Tombol "A" dalam kotak; tampilannya mengikuti gaya latar yang aktif. */
 @Composable
 private fun TextBackgroundButton(
-    background: Color,
-    textColor: Color,
+    background: TextLayerBackground,
     onClick: () -> Unit,
 ) {
+    val boxColor = when (background) {
+        TextLayerBackground.None -> Color.Transparent
+        TextLayerBackground.Solid -> Color.White
+        TextLayerBackground.Translucent -> Color.White.copy(alpha = 0.45f)
+    }
+    val letterColor = if (background == TextLayerBackground.Solid) Color.Black else Color.White
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(48.dp)
             .clip(CircleShape)
-            .background(EditorColors.IconContainer)
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.zm_text_background), onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .size(24.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(background)
-                .border(1.5.dp, Color.White, RoundedCornerShape(6.dp)),
+                .size(40.dp)
+                .background(EditorColors.IconContainer, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Text("A", color = contrastTextColor(textColor, background), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .background(boxColor, RoundedCornerShape(6.dp))
+                    .border(1.5.dp, Color.White, RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("A", color = letterColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -247,10 +278,9 @@ private fun FontChips(
     }
 }
 
-/** Saat teks berlatar dan warnanya sama dengan latar, pakai warna kontras agar tetap terbaca. */
-private fun contrastTextColor(textColor: Color, background: Color): Color =
-    if (background != Color.Transparent && background == textColor) {
-        if (background == Color.White) Color.Black else Color.White
-    } else {
-        textColor
-    }
+
+private fun TextLayerAlign.icon(): Int = when (this) {
+    TextLayerAlign.Left -> R.drawable.zm_ic_align_left
+    TextLayerAlign.Center -> R.drawable.zm_ic_align_center
+    TextLayerAlign.Right -> R.drawable.zm_ic_align_right
+}

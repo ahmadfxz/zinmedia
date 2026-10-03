@@ -1,5 +1,6 @@
 package com.zinmedia.videoeditor.draw
 
+import androidx.core.graphics.createBitmap
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
@@ -40,7 +41,7 @@ import android.graphics.Paint as AndroidPaint
 
 @SuppressLint("RememberReturnType")
 @Composable
-fun DrawingCanvas(
+internal fun DrawingCanvas(
     viewModel: DrawingViewModel,
 ) {
     val uiState = viewModel.uiState
@@ -106,7 +107,7 @@ fun DrawingCanvas(
 }
 
 
-fun renderPathsToBitmap(
+internal fun renderPathsToBitmap(
     paths: List<DrawPath>,
     canvasWidth: Float,
     canvasHeight: Float,
@@ -116,7 +117,7 @@ fun renderPathsToBitmap(
 
     val scale = min(bitmapWidth / canvasWidth, bitmapHeight / canvasHeight)
 
-    val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(bitmapWidth, bitmapHeight)
     val canvas = android.graphics.Canvas(bitmap)
     canvas.drawColor(android.graphics.Color.TRANSPARENT)
 
@@ -174,7 +175,7 @@ fun renderPathsToBitmap(
 }
 
 
-fun DrawScope.drawPathStyled(dp: DrawPath) {
+internal fun DrawScope.drawPathStyled(dp: DrawPath) {
     if (dp.points.size < 2) return
 
     when (dp.style) {
@@ -184,7 +185,7 @@ fun DrawScope.drawPathStyled(dp: DrawPath) {
     }
 }
 
-fun DrawScope.drawPen(dp: DrawPath) {
+internal fun DrawScope.drawPen(dp: DrawPath) {
     if (dp.points.size > 1) {
         for (i in 0 until dp.points.lastIndex) {
             drawLine(
@@ -199,7 +200,7 @@ fun DrawScope.drawPen(dp: DrawPath) {
 }
 
 
-fun DrawScope.drawNeon(dp: DrawPath) {
+internal fun DrawScope.drawNeon(dp: DrawPath) {
     if (dp.points.size < 2) return
 
     val path = Path().apply {
@@ -256,4 +257,26 @@ private fun DrawScope.drawStroke(
             blendMode = blendMode
         )
     }
+}
+
+/** Batas piksel yang tidak transparan; `null` bila bitmap kosong. */
+internal fun Bitmap.opaqueBounds(): android.graphics.Rect? {
+    val pixels = IntArray(width * height)
+    getPixels(pixels, 0, width, 0, 0, width, height)
+    var left = width
+    var top = height
+    var right = -1
+    var bottom = -1
+    for (y in 0 until height) {
+        val row = y * width
+        for (x in 0 until width) {
+            if (pixels[row + x] ushr 24 != 0) {
+                if (x < left) left = x
+                if (x > right) right = x
+                if (y < top) top = y
+                bottom = y
+            }
+        }
+    }
+    return if (right < 0) null else android.graphics.Rect(left, top, right + 1, bottom + 1)
 }

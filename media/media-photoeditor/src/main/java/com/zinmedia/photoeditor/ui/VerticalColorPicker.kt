@@ -45,7 +45,7 @@ private val PaletteTopToBottom = listOf(
  * Posisi awal thumb mengikuti [colorThumb] bila warnanya ada di palet.
  */
 @Composable
-fun VerticalColorPicker(
+internal fun VerticalColorPicker(
     onColorChange: (Color) -> Unit,
     colorThumb: Color,
     modifier: Modifier = Modifier
@@ -53,7 +53,6 @@ fun VerticalColorPicker(
     val thumbSize = 26.dp
     val density = LocalDensity.current
     var trackHeight by remember { mutableIntStateOf(0) }
-    // 0 = atas, 1 = bawah
     var position by remember {
         mutableFloatStateOf(
             PaletteTopToBottom.indexOf(colorThumb)

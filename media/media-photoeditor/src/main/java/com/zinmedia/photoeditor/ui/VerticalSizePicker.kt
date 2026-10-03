@@ -1,5 +1,7 @@
 package com.zinmedia.photoeditor.ui
 
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -33,7 +35,7 @@ import androidx.compose.ui.unit.times
 
 
 @Composable
-fun VerticalSizePicker(
+internal fun VerticalSizePicker(
     onValueChange: (Float) -> Unit,
     currentStroke: Float,
     modifier: Modifier = Modifier,
@@ -42,7 +44,7 @@ fun VerticalSizePicker(
     minThumbDp: Dp = 15.dp,
     maxThumbDp: Dp = 35.dp
 ) {
-    var sliderPosition by remember { mutableStateOf((currentStroke - minStroke) / (maxStroke - minStroke)) }
+    var sliderPosition by remember { mutableFloatStateOf((currentStroke - minStroke) / (maxStroke - minStroke)) }
 
     val density = LocalDensity.current
     var trackMode by remember { mutableStateOf(TrackMode.NORMAL) }
@@ -53,13 +55,13 @@ fun VerticalSizePicker(
     Box(
         modifier = modifier
             .width(35.dp)
-            .offset(x = trackOffsetX)
+            .offset { IntOffset(trackOffsetX.roundToPx(), 0) }
             .height(200.dp),
         contentAlignment = Alignment.Center
     ) {
         VerticalTrapezoidTrack(mode = trackMode, topWidth = 20.dp, bottomWidth = 8.dp)
 
-        var boxHeight by remember { mutableStateOf(0f) }
+        var boxHeight by remember { mutableFloatStateOf(0f) }
 
         Box(
             modifier = Modifier
@@ -107,7 +109,7 @@ fun VerticalSizePicker(
 
                 Box(
                     modifier = Modifier
-                        .offset(y = animatedThumbY)
+                        .offset { IntOffset(0, animatedThumbY.roundToPx()) }
                         .size(animatedThumbDp)
                         .clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.8f))
@@ -119,13 +121,13 @@ fun VerticalSizePicker(
     }
 }
 
-enum class TrackMode {
+internal enum class TrackMode {
     NORMAL,
     TRAPEZOID
 }
 
 @Composable
-fun VerticalTrapezoidTrack(
+internal fun VerticalTrapezoidTrack(
     modifier: Modifier = Modifier,
     mode: TrackMode = TrackMode.NORMAL,
     topWidth: Dp = 20.dp,

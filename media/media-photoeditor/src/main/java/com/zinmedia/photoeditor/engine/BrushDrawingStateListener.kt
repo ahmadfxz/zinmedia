@@ -5,19 +5,16 @@ package com.zinmedia.photoeditor.engine
  *
  * @author <https:></https:>//github.com/burhanrashid52>
  */
-class BrushDrawingStateListener internal constructor(
+internal class BrushDrawingStateListener internal constructor(
     private val mPhotoEditorView: PhotoEditorView,
     private val mViewState: DrawerEditorViewState
 ) : BrushViewChangeListener {
     private var mOnPhotoEditorListener: OnPhotoEditorListener? = null
-    fun setOnPhotoEditorListener(onPhotoEditorListener: OnPhotoEditorListener?) {
+    internal fun setOnPhotoEditorListener(onPhotoEditorListener: OnPhotoEditorListener?) {
         mOnPhotoEditorListener = onPhotoEditorListener
     }
 
     override fun onViewAdd(drawingView: DrawingView) {
-//        if (mViewState.redoViewsCount > 0) {
-//            mViewState.popRedoView()
-//        }
         mViewState.addAddedView(drawingView)
         mOnPhotoEditorListener?.onAddViewListener(
             ViewType.BRUSH_DRAWING,
@@ -33,7 +30,6 @@ class BrushDrawingStateListener internal constructor(
             if (removeView !is DrawingView) {
                 mPhotoEditorView.removeView(removeView)
             }
-         //   mViewState.pushRedoView(removeView)
         }
         mOnPhotoEditorListener?.onRemoveViewListener(
             ViewType.BRUSH_DRAWING,
@@ -47,9 +43,6 @@ class BrushDrawingStateListener internal constructor(
     }
 
     override fun onStopDrawing() {
-//        if (mViewState.redoViewsCount > 0) {
-//            mViewState.clearRedoViews()
-//        }
         mOnPhotoEditorListener?.onStopViewChangeListener(ViewType.BRUSH_DRAWING)
     }
 }

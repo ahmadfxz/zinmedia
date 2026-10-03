@@ -3,7 +3,6 @@ package com.zinmedia.photoeditor.engine
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
-import android.widget.ImageView
 import com.zinmedia.photoeditor.R
 import com.zinmedia.photoeditor.engine.MultiTouchListener.OnGestureControl
 
@@ -33,25 +32,10 @@ internal abstract class Graphic(
         setupRemoveView(rootView)
     }
 
-
     private fun setupRemoveView(rootView: View) {
         //We are setting tag as ViewType to identify what type of the view it is
         //when we remove the view from stack i.e onRemoveViewListener(ViewType viewType, int numberOfAddedViews);
         rootView.tag = viewType
-        val imgClose = rootView.findViewById<ImageView>(R.id.imgPhotoEditorClose)
-        imgClose?.setOnClickListener { graphicManager?.removeView(this@Graphic) }
-    }
-
-    protected fun toggleSelection() {
-        val frmBorder = rootView.findViewById<View>(R.id.frmBorder)
-        val imgClose = rootView.findViewById<View>(R.id.imgPhotoEditorClose)
-        if (frmBorder != null) {
-            frmBorder.setBackgroundResource(R.drawable.rounded_border_tv)
-            frmBorder.tag = true
-        }
-        if (imgClose != null) {
-            imgClose.visibility = View.VISIBLE
-        }
     }
 
     protected fun buildGestureController(
@@ -61,14 +45,13 @@ internal abstract class Graphic(
         val boxHelper = BoxHelper(photoEditorView, viewState)
         return object : OnGestureControl {
             override fun onClick() {
+                // Tanpa bingkai/tombol X: lapisan dihapus dengan diseret ke tempat sampah.
                 boxHelper.clearHelperBox()
-                toggleSelection()
                 // Change the in-focus view
                 viewState.currentSelectedView = rootView
             }
 
             override fun onLongClick() {
-                //updateView(rootView)
             }
 
             override fun onDoubleClick() {

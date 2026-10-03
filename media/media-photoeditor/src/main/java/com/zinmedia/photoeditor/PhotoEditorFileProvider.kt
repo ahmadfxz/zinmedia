@@ -10,14 +10,29 @@ import java.io.File
  * dengan authority `${applicationId}.zinmedia.photoeditor.fileprovider`, sehingga
  * tidak bergantung dan tidak bentrok dengan FileProvider milik aplikasi.
  */
-class PhotoEditorFileProvider : FileProvider(R.xml.zinmedia_photoeditor_file_paths) {
+public class PhotoEditorFileProvider : FileProvider(R.xml.zm_photoeditor_file_paths) {
 
-    companion object {
+    public companion object {
         /** Folder hasil edit; hanya folder ini yang dibuka lewat provider. */
-        internal fun outputDir(context: Context): File =
+        public fun outputDir(context: Context): File =
             File(context.cacheDir, "zinmedia/photoeditor").apply { mkdirs() }
 
-        internal fun uriFor(context: Context, file: File): Uri =
+        /**
+         * Hapus hasil edit lama (default: lebih dari 24 jam) agar cache tidak terus membesar.
+         * Hasil terbaru tetap ada supaya aplikasi sempat membaca/mengunggahnya.
+         */
+        public fun deleteOldOutputs(context: Context, maxAgeMs: Long = DEFAULT_MAX_AGE_MS): Int =
+            deleteFilesOlderThan(outputDir(context), maxAgeMs)
+
+        private const val DEFAULT_MAX_AGE_MS: Long = 24 * 60 * 60 * 1000L
+
+        public fun uriFor(context: Context, file: File): Uri =
             getUriForFile(context, "${context.packageName}.zinmedia.photoeditor.fileprovider", file)
     }
 }
+
+/** Hapus file di [dir] yang terakhir diubah lebih dari [maxAgeMs] sebelum [now]; mengembalikan jumlahnya. */
+internal fun deleteFilesOlderThan(dir: File, maxAgeMs: Long, now: Long = System.currentTimeMillis()): Int =
+    dir.listFiles().orEmpty().count { file ->
+        file.isFile && now - file.lastModified() > maxAgeMs && file.delete()
+    }

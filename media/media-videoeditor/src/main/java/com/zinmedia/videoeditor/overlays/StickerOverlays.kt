@@ -4,7 +4,9 @@ import androidx.annotation.OptIn
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
@@ -14,25 +16,30 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
 import com.zinmedia.videoeditor.data.Overlay
 import com.zinmedia.videoeditor.data.VideoEditorViewModel
@@ -42,488 +49,176 @@ import compose.icons.evaicons.outline.Trash
 import compose.icons.evaicons.outline.Trash2
 import kotlin.math.roundToInt
 
-
+/**
+ * Stiker & teks di atas video: geser, cubit (zoom/putar), dan seret ke [TrashTarget] untuk menghapus.
+ * Teks diketuk dua kali untuk diedit.
+ *
+ * @param trashBounds batas tempat sampah (koordinat root); overlay dihapus bila jari dilepas di atasnya.
+ * @param onDragChange dipanggil saat overlay mulai/selesai diseret dan saat jari masuk/keluar tempat sampah.
+ */
 @OptIn(UnstableApi::class)
 @Composable
-fun StickerOverlays(
+internal fun StickerOverlays(
     viewModel: VideoEditorViewModel,
     overlays: List<Overlay>,
     videoWidthPx: Float,
     videoHeightPx: Float,
+    trashBounds: () -> Rect,
+    onDragChange: (dragging: Boolean, overTrash: Boolean) -> Unit,
+    hiddenOverlayId: String? = null,
+    onTextDoubleTap: (Overlay) -> Unit = {},
 ) {
-    var showDeleteIcon by remember { mutableStateOf(false) }
-
-    val deleteZoneHeight = videoHeightPx * 0.10f      // 15% bawah layar
-    val deleteZoneStartX = videoWidthPx * 0.33f       // ⅓ kiri
-    val deleteZoneEndX = videoWidthPx * 0.66f         // ⅓ kanan (middle area)
-
-    // State global untuk semua stiker: overlayId -> isInDeleteArea
-    val overlayDeleteMap = remember {
-        mutableStateMapOf<String, Boolean>().apply {
-            overlays.filter { it.type == Overlay.Type.STICKER }
-                .forEach { put(it.id, false) }
-        }
-    }
+    val currentTrashBounds by rememberUpdatedState(trashBounds)
+    val currentOnDragChange by rememberUpdatedState(onDragChange)
 
     Box(
         contentAlignment = Alignment.Center,
-        modifier =
-            Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize()
     ) {
-        overlays.filter { it.type == Overlay.Type.STICKER }
-            .forEach { overlay ->
-                key(overlay.id) {
-                    val minScale = 0.5f
-                    val maxScale = 3f
+        overlays.filter { it.id != hiddenOverlayId }.forEach { overlay ->
+            key(overlay.id) {
+                // Gesture berjalan lama; selalu pakai data overlay terbaru (mis. setelah teks diedit).
+                val currentOverlay by rememberUpdatedState(overlay)
+                var scale by remember { mutableFloatStateOf(1f) }
+                var rotation by remember { mutableFloatStateOf(0f) }
+                var offset by remember { mutableStateOf(Offset.Zero) }
+                var overTrash by remember { mutableStateOf(false) }
+                val coordinates = remember { CoordinatesRef() }
 
-                    var scale by remember { mutableFloatStateOf(1f) }
-                    var rotation by remember { mutableFloatStateOf(0f) }
-                    var offset by remember { mutableStateOf(Offset.Zero) }
+                val state = rememberTransformableState { zoom, pan, rotate ->
+                    scale = (scale * zoom).coerceIn(MinScale, MaxScale)
+                    rotation += rotate
+                    offset += pan
+                }
 
-                    val state = rememberTransformableState { zoom, pan, rotate ->
-                        // scale dengan batasan
-                        scale = (scale * zoom).coerceIn(minScale, maxScale)
-
-                        rotation += rotate
-                        offset += pan
+                // Teks tampil seukuran pikselnya (sama dengan mode teks); stiker di-fit ke kotak persegi.
+                val density = LocalDensity.current
+                val bitmapW = overlay.bitmap.width.toFloat()
+                val bitmapH = overlay.bitmap.height.toFloat()
+                val displaySize = if (overlay.textLayer != null) {
+                    with(density) { DpSize(bitmapW.toDp(), bitmapH.toDp()) }
+                } else {
+                    DpSize(StickerBaseSize, StickerBaseSize)
+                }
+                val baseWidthPx = if (overlay.textLayer != null) {
+                    bitmapW
+                } else {
+                    with(density) { StickerBaseSize.toPx() } * minOf(1f, bitmapW / bitmapH)
+                }
+                // Lebar relatif terhadap frame; dipakai ekspor agar ukurannya sama dengan preview.
+                fun widthFraction(): Float =
+                    if (videoWidthPx > 1f) baseWidthPx * scale / videoWidthPx else 0f
+                LaunchedEffect(videoWidthPx, overlay.bitmap) {
+                    if (overlay.widthFraction == 0f && videoWidthPx > 1f) {
+                        viewModel.updateOverlay(overlay.copy(widthFraction = widthFraction()))
                     }
+                }
 
-                    val absX = videoWidthPx / 2f + offset.x
-                    val absY = videoHeightPx / 2f + offset.y
-
-                    overlayDeleteMap[overlay.id] =
-                        absY > videoHeightPx - deleteZoneHeight &&
-                                absX > deleteZoneStartX &&
-                                absX < deleteZoneEndX
-
-                    val endGestureModifier = Modifier.pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                awaitFirstDown(requireUnconsumed = false)
-                                showDeleteIcon = true
-                                do {
-                                    val event = awaitPointerEvent()
-
-                                } while (event.changes.any { it.pressed })
-
-                                showDeleteIcon = false
-//
-                                if (overlayDeleteMap[overlay.id] == true) {
-                                    Log.d("HAPUS STIKER", "DELETE STIKER")
-                                    viewModel.removeOverlay(overlay.id)
-                                } else {
-                                    val absoluteX = videoWidthPx / 2f + offset.x
-                                    val absoluteY = videoHeightPx / 2f + offset.y
-
-                                    var anchorX = (absoluteX / videoWidthPx) * 2f - 1f
-                                    var anchorY = -((absoluteY / videoHeightPx) * 2f - 1f)
-
-                                    anchorX = anchorX.coerceIn(-1f, 1f)
-                                    anchorY = anchorY.coerceIn(-1f, 1f)
-
-                                    viewModel.updateOverlay(
-                                        overlay.copy(
-                                            posXpx = anchorX,
-                                            posYpx = anchorY,
-                                            scale = scale,
-                                            rotation = -rotation
-                                        )
-                                    )
-
-                                }
-                                overlayDeleteMap.keys.forEach {
-                                    overlayDeleteMap[it] = false
-                                }
+                val dragModifier = Modifier.pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var dragging = false
+                        do {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.pressed } ?: break
+                            if (!dragging && (change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                                dragging = true
                             }
-                        }
-                    }
-                    val animateScale by animateFloatAsState(
-                        if (overlayDeleteMap[overlay.id] == true) 0.6f else 1f,
-                        label = ""
-                    )
-                    Box(
-                        Modifier
-                            .offset {
-                                IntOffset(offset.x.roundToInt(), offset.y.roundToInt())
+                            if (dragging) {
+                                val layout = coordinates.value
+                                overTrash = layout != null && layout.isAttached &&
+                                    currentTrashBounds().contains(layout.localToRoot(change.position))
+                                currentOnDragChange(true, overTrash)
                             }
-                            .transformable(state)
-                            .then(endGestureModifier)
-                            .scale(animateScale)
-                    ) {
-                        overlay.bitmap?.let {
-                            Image(
-                                bitmap = it,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .graphicsLayer(
-                                        scaleX = scale,
-                                        scaleY = scale,
-                                        rotationZ = rotation,
-                                        transformOrigin = TransformOrigin.Center
+                        } while (event.changes.any { it.pressed })
+
+                        if (dragging) {
+                            if (overTrash) {
+                                viewModel.removeOverlay(currentOverlay.id)
+                            } else {
+                                // Pusat dalam NDC frame video; boleh di luar [-1, 1] (kanvas ekspor diperluas).
+                                val anchorX = (videoWidthPx / 2f + offset.x) / videoWidthPx * 2f - 1f
+                                val anchorY = -((videoHeightPx / 2f + offset.y) / videoHeightPx * 2f - 1f)
+                                viewModel.updateOverlay(
+                                    currentOverlay.copy(
+                                        posXpx = anchorX,
+                                        posYpx = anchorY,
+                                        scale = scale,
+                                        rotation = -rotation,
+                                        widthFraction = widthFraction(),
                                     )
-                                    .size(160.dp)
-                                    //  .background(Color.Blue)
-                                    .clipToBounds()
-                            )
+                                )
+                            }
+                            overTrash = false
+                            currentOnDragChange(false, false)
                         }
                     }
                 }
+                val animateScale by animateFloatAsState(if (overTrash) 0.6f else 1f, label = "trashScale")
+                Box(
+                    Modifier
+                        .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
+                        .onGloballyPositioned { coordinates.value = it }
+                        .transformable(state)
+                        .then(dragModifier)
+                        .then(
+                            if (overlay.textLayer != null) {
+                                // Ketuk sekali untuk menggeser (seperti stiker), ketuk dua kali untuk mengedit.
+                                Modifier.pointerInput(overlay.id) {
+                                    detectTapGestures(onDoubleTap = { onTextDoubleTap(currentOverlay) })
+                                }
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .scale(animateScale)
+                ) {
+                    Image(
+                        bitmap = overlay.bitmap,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .graphicsLayer(
+                                scaleX = scale,
+                                scaleY = scale,
+                                rotationZ = rotation,
+                                transformOrigin = TransformOrigin.Center
+                            )
+                            .size(displaySize)
+                            .clipToBounds()
+                    )
+                }
             }
-        if (showDeleteIcon) {
-            val anyInDeleteArea = overlayDeleteMap.values.any { it }
-            val scale by animateFloatAsState(
-                if (anyInDeleteArea) 1.4f else 1f,
-                label = ""
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .size(50.dp)
-                    .graphicsLayer(scaleX = scale, scaleY = scale)
-                    .background(
-                        if (anyInDeleteArea) Color.Red.copy(alpha = 0.8f)
-                        else Color.Gray.copy(alpha = 0.6f),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector =if (anyInDeleteArea) EvaIcons.Outline.Trash2 else  EvaIcons.Outline.Trash,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-
         }
     }
-
 }
 
+/** Tempat sampah yang muncul saat overlay diseret; membesar dan memerah saat jari di atasnya. */
+@Composable
+internal fun TrashTarget(active: Boolean, modifier: Modifier = Modifier) {
+    val scale by animateFloatAsState(if (active) 1.3f else 1f, label = "trash")
+    Box(
+        modifier = modifier
+            .size(56.dp)
+            .graphicsLayer(scaleX = scale, scaleY = scale)
+            .background(if (active) Color.Red.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.5f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = if (active) EvaIcons.Outline.Trash2 else EvaIcons.Outline.Trash,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(28.dp)
+        )
+    }
+}
 
-//
-//@OptIn(UnstableApi::class)
-//@Composable
-//fun StickerOverlays(
-//    viewModel: VideoEditorViewModelTest,
-//    overlays: List<Overlay>,
-//    videoWidthPx: Float,
-//    videoHeightPx: Float,
-//) {
-//    var showDeleteIcon by remember { mutableStateOf(false) }
-//
-//    val deleteZoneHeight = videoHeightPx * 0.10f      // 15% bawah layar
-//    val deleteZoneStartX = videoWidthPx * 0.33f       // ⅓ kiri
-//    val deleteZoneEndX = videoWidthPx * 0.66f         // ⅓ kanan (middle area)
-//
-//    // State global untuk semua stiker: overlayId -> isInDeleteArea
-//    val overlayDeleteMap = remember {
-//        mutableStateMapOf<String, Boolean>().apply {
-//            overlays.filter { it.type == Overlay.Type.STICKER }
-//                .forEach { put(it.id, false) }
-//        }
-//    }
-//
-//
-//    Box(
-//        modifier =
-//            Modifier.fillMaxSize()
-//    ) {
-//        overlays.filter { it.type == Overlay.Type.STICKER }
-//            .forEach { overlay ->
-//                key(overlay.id) {
-//                    // posisi awal dalam pixel (dari VM)
-//                    var offsetX by remember(overlay.id) {
-//                        mutableStateOf(550f)
-//                    }
-//                    var offsetY by remember(overlay.id) {
-//                        mutableStateOf(1000f)
-//                    }
-//
-//                    val bitmap = overlay.bitmap ?: return@forEach
-//                    val scale by animateFloatAsState(
-//                        if (overlayDeleteMap[overlay.id] == true) 0.6f else 1f,
-//                        label = ""
-//                    )
-//                    overlayDeleteMap[overlay.id] = offsetY > videoHeightPx - deleteZoneHeight &&
-//                            offsetX > deleteZoneStartX &&
-//                            offsetX < deleteZoneEndX
-//
-//                    Image(
-//                        bitmap = bitmap,
-//                        contentDescription = null,
-//                        modifier = Modifier
-//                            .offset {
-//                                IntOffset(
-//                                    (offsetX - bitmap.width / 2).roundToInt(),
-//                                    (offsetY - bitmap.height / 2).roundToInt()
-//                                )
-//                            }
-//                            .pointerInput(overlay.id) {
-//                                detectDragGestures(
-//                                    onDragStart = {
-//                                        showDeleteIcon = true
-//                                    },
-//                                    onDragEnd = {
-//                                        showDeleteIcon = false
-//
-//                                        if (overlayDeleteMap[overlay.id] == true) {
-//                                            Log.d("HAPUS STIKER", "DELETE STIKER")
-//                                            viewModel.removeOverlay(overlay.id)
-//                                        } else {
-//                                            // konversi ke anchor -1..1
-//                                            val anchorX = 2f * (offsetX / videoWidthPx) - 1f
-//                                            val anchorY = 1f - (offsetY / videoHeightPx) * 2f
-//
-//                                            viewModel.updateOverlay(
-//                                                overlay.copy(
-//                                                    posXpx = anchorX,
-//                                                    posYpx = anchorY
-//                                                )
-//                                            )
-//                                        }
-//                                        overlayDeleteMap.keys.forEach {
-//                                            overlayDeleteMap[it] = false
-//                                        }
-//                                    }
-//                                ) { change, dragAmount ->
-//                                    change.consume()
-//                                    offsetX = (offsetX + dragAmount.x).coerceIn(0f, videoWidthPx)
-//                                    offsetY = (offsetY + dragAmount.y).coerceIn(0f, videoHeightPx)
-//                                }
-//                            }
-//                            .clipToBounds()
-//                            .scale(scale)
-//
-//                    )
-//                }
-//            }
-//        if (showDeleteIcon) {
-//            val anyInDeleteArea = overlayDeleteMap.values.any { it }
-//            val scale by animateFloatAsState(
-//                if (anyInDeleteArea) 1.4f else 1f,
-//                label = ""
-//            )
-//            Box(
-//                modifier = Modifier
-//                    .align(Alignment.BottomCenter)
-//                    .size(50.dp)
-//                    .graphicsLayer(scaleX = scale, scaleY = scale)
-//                    .background(
-//                        if (anyInDeleteArea) Color.Red.copy(alpha = 0.8f)
-//                        else Color.Gray.copy(alpha = 0.6f),
-//                        shape = CircleShape
-//                    ),
-//                contentAlignment = Alignment.Center
-//            ) {
-//                Icon(
-//                    imageVector = EvaIcons.Outline.Trash,
-//                    contentDescription = null,
-//                    tint = Color.White,
-//                    modifier = Modifier.size(28.dp)
-//                )
-//            }
-//
-//        }
-//    }
-//}
-//
-//
-//@OptIn(UnstableApi::class)
-//@Composable
-//fun StickerOverlays(
-//    viewModel: VideoEditorViewModelTest,
-//    overlays: List<Overlay>,
-//    videoWidthPx: Float,
-//    videoHeightPx: Float,
-//) {
-//    var showDeleteIcon by remember { mutableStateOf(false) }
-//
-//    val deleteZoneHeight = videoHeightPx * 0.10f      // 15% bawah layar
-//    val deleteZoneStartX = videoWidthPx * 0.33f       // ⅓ kiri
-//    val deleteZoneEndX = videoWidthPx * 0.66f         // ⅓ kanan (middle area)
-//
-//    // State global untuk semua stiker: overlayId -> isInDeleteArea
-//    val overlayDeleteMap = remember {
-//        mutableStateMapOf<String, Boolean>().apply {
-//            overlays.filter { it.type == Overlay.Type.STICKER }
-//                .forEach { put(it.id, false) }
-//        }
-//    }
-//
-//
-//    Box(
-//        contentAlignment = Alignment.Center,
-//        modifier =
-//            Modifier.fillMaxSize()
-//    ) {
-//        overlays.filter { it.type == Overlay.Type.STICKER }
-//            .forEach { overlay ->
-//                key(overlay.id) {
-//
-//                    //  posisi awal dalam pixel (dari VM)
-//                    var offsetX by remember(overlay.id) { mutableStateOf(0f) }
-//                    var offsetY by remember(overlay.id) { mutableStateOf(0f) }
-//                    var rotation by remember(overlay.id) { mutableStateOf(0f) }
-//                    var scale by remember(overlay.id) { mutableFloatStateOf(2f) }
-//
-//                    val bitmap = overlay.bitmap ?: return@forEach
-//
-//                    val animateScale by animateFloatAsState(
-//                        if (overlayDeleteMap[overlay.id] == true) 0.6f else 1f,
-//                        label = ""
-//                    )
-//
-//                    val state =
-//                        rememberTransformableState { zoomChange, offsetChange, rotationChange ->
-//                            scale *= zoomChange
-//                            rotation += rotationChange
-//                            offsetX += offsetChange.x
-//                            offsetY += offsetChange.y
-//                            showDeleteIcon = true
-//                        }
-//
-//                    overlayDeleteMap[overlay.id] = offsetY > videoHeightPx - deleteZoneHeight &&
-//                            offsetX > deleteZoneStartX &&
-//                            offsetX < deleteZoneEndX
-//
-//                    val endGestureModifier = Modifier.pointerInput(Unit) {
-//                        awaitPointerEventScope {
-//                            while (true) {
-//                                awaitFirstDown(requireUnconsumed = false)
-//                                do {
-//                                    val event = awaitPointerEvent()
-//                                } while (event.changes.any { it.pressed })
-//
-//                                showDeleteIcon = false
-////
-//                                if (overlayDeleteMap[overlay.id] == true) {
-//                                    Log.d("HAPUS STIKER", "DELETE STIKER")
-//                                    viewModel.removeOverlay(overlay.id)
-//                                } else {
-//                                    // konversi ke anchor -1..1
-//                                    val finalOffsetX =
-//                                        (offsetX).coerceIn(0f, videoWidthPx)
-//                                    val finalOffsetY =
-//                                        (offsetY).coerceIn(0f, videoHeightPx)
-//                                    val anchorX = 2f * (finalOffsetX / videoWidthPx) - 1f
-//                                    val anchorY = 1f - (finalOffsetY / videoHeightPx) * 2f
-//
-//                                    viewModel.updateOverlay(
-//                                        overlay.copy(
-//                                            posXpx = anchorX,
-//                                            posYpx = anchorY,
-//                                            scale = scale,
-//                                            rotation = rotation
-//                                        )
-//                                    )
-//                                }
-//                                overlayDeleteMap.keys.forEach {
-//                                    overlayDeleteMap[it] = false
-//                                }
-//                            }
-//                        }
-//                    }
-//                    Image(
-//                        bitmap = bitmap,
-//                        contentDescription = null,
-//                        modifier = Modifier
-////                            .offset {
-////                                IntOffset(offsetX.roundToInt(), offsetY.roundToInt())
-////                            }
-//
-//                            .graphicsLayer(
-//                                translationX = offsetX,
-//                                translationY = offsetY,
-//                                scaleX = scale,
-//                                scaleY = scale,
-//                                rotationZ = rotation,
-//                                transformOrigin = TransformOrigin.Center
-//                            )
-//                            .transformable(state)
-//                            .then(endGestureModifier)
-//                            .scale(animateScale)
-//
-////                            .offset {
-////                                IntOffset(
-////                                    (offsetX - bitmap.width / 2).roundToInt(),
-////                                    (offsetY - bitmap.height / 2).roundToInt()
-////                                )
-////                            }
-////                                .graphicsLayer(
-////                                    scaleX = scale,
-////                                    scaleY = scale,
-////                                    rotationZ = rotation,
-////                                    translationX = offsetX,
-////                                    translationY = offsetY
-////                                )
-////                                .transformable(state = state)
-////                            .pointerInput(overlay.id) {
-////                                detectDragGestures(
-////                                    onDragStart = {
-////                                        showDeleteIcon = true
-////                                    },
-////                                    onDragEnd = {
-////                                        showDeleteIcon = false
-////
-////                                        if (overlayDeleteMap[overlay.id] == true) {
-////                                            Log.d("HAPUS STIKER", "DELETE STIKER")
-////                                            viewModel.removeOverlay(overlay.id)
-////                                        } else {
-////                                            // konversi ke anchor -1..1
-////                                            val anchorX = 2f * (offsetX / videoWidthPx) - 1f
-////                                            val anchorY = 1f - (offsetY / videoHeightPx) * 2f
-////
-////                                            viewModel.updateOverlay(
-////                                                overlay.copy(
-////                                                    posXpx = anchorX,
-////                                                    posYpx = anchorY
-////                                                )
-////                                            )
-////                                        }
-////                                        overlayDeleteMap.keys.forEach {
-////                                            overlayDeleteMap[it] = false
-////                                        }
-////                                    }
-////                                ) { change, dragAmount ->
-////                                    change.consume()
-////                                    offsetX = (offsetX + dragAmount.x).coerceIn(0f, videoWidthPx)
-////                                    offsetY = (offsetY + dragAmount.y).coerceIn(0f, videoHeightPx)
-////                                }
-////                            }
-//
-//
-//                    )
-//
-//                }
-//            }
-//        if (showDeleteIcon) {
-//            val anyInDeleteArea = overlayDeleteMap.values.any { it }
-//            val scale by animateFloatAsState(
-//                if (anyInDeleteArea) 1.4f else 1f,
-//                label = ""
-//            )
-//            Box(
-//                modifier = Modifier
-//                    .align(Alignment.BottomCenter)
-//                    .size(50.dp)
-//                    .graphicsLayer(scaleX = scale, scaleY = scale)
-//                    .background(
-//                        if (anyInDeleteArea) Color.Red.copy(alpha = 0.8f)
-//                        else Color.Gray.copy(alpha = 0.6f),
-//                        shape = CircleShape
-//                    ),
-//                contentAlignment = Alignment.Center
-//            ) {
-//                Icon(
-//                    imageVector = EvaIcons.Outline.Trash,
-//                    contentDescription = null,
-//                    tint = Color.White,
-//                    modifier = Modifier.size(28.dp)
-//                )
-//            }
-//
-//        }
-//    }
-//}
+/** Posisi layout overlay, dibaca dari dalam gesture tanpa memicu recomposition. */
+private class CoordinatesRef {
+    var value: LayoutCoordinates? = null
+}
 
+private const val MinScale = 0.5f
+private const val MaxScale = 3f
+
+/** Ukuran dasar stiker di preview (sebelum dicubit/zoom). */
+private val StickerBaseSize = 160.dp

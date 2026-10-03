@@ -5,14 +5,13 @@ import android.graphics.Paint
 import android.util.Log
 import kotlin.math.abs
 
-class BrushShape : AbstractShape("BrushShape") {
+internal class BrushShape : AbstractShape("BrushShape") {
 
     override fun draw(canvas: Canvas, paint: Paint) {
         canvas.drawPath(path, paint)
     }
 
     override fun startShape(x: Float, y: Float) {
-        Log.d(tag, "startShape@ $x,$y")
         path.moveTo(x, y)
         left = x
         top = y
@@ -29,6 +28,5 @@ class BrushShape : AbstractShape("BrushShape") {
     }
 
     override fun stopShape() {
-        Log.d(tag, "stopShape")
     }
 }

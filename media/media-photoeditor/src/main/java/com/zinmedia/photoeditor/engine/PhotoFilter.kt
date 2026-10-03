@@ -14,7 +14,7 @@ package com.zinmedia.photoeditor.engine
  *
  * @since 2/14/2018
  */
-enum class PhotoFilter {
+public enum class PhotoFilter {
     NONE,
     AUTO_FIX,
     BLACK_WHITE,

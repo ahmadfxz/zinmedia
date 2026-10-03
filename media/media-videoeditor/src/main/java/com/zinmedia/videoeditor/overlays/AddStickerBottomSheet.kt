@@ -1,5 +1,7 @@
 package com.zinmedia.videoeditor.overlays
 
+import com.zinmedia.videoeditor.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,23 +29,33 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.zinmedia.videoeditor.VideoEditorConfig
 import com.zinmedia.videoeditor.ui.TrayTabs
 
 /** Isi tray stiker: tab Emoji dan Stiker. */
 @Composable
-fun StickerBottomSheetContent(
+internal fun StickerBottomSheetContent(
     onEmojiClick: (String) -> Unit,
     onStickerClick: (String) -> Unit,
 ) {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    val emojis = VideoEditorConfig.emojis
+    val stickers = VideoEditorConfig.stickers
+    val tabs = buildList {
+        if (emojis.isNotEmpty()) add(0)
+        if (stickers.isNotEmpty()) add(1)
+    }
+    var selected by rememberSaveable { mutableIntStateOf(0) }
+    val tab = tabs.getOrNull(selected) ?: tabs.firstOrNull() ?: return
 
-    TrayTabs(
-        tabs = listOf("Emoji", "Stiker"),
-        selected = tab,
-        onSelect = { tab = it },
-        modifier = Modifier.padding(horizontal = 16.dp),
-    )
-    Spacer(Modifier.height(12.dp))
+    if (tabs.size > 1) {
+        TrayTabs(
+            tabs = tabs.map { if (it == 0) stringResource(R.string.zm_tab_emoji) else stringResource(R.string.zm_tab_sticker) },
+            selected = tabs.indexOf(tab),
+            onSelect = { selected = it },
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+    }
     when (tab) {
         0 -> LazyVerticalGrid(
             columns = GridCells.Fixed(7),
@@ -52,7 +64,7 @@ fun StickerBottomSheetContent(
                 .height(TrayHeight),
             contentPadding = PaddingValues(horizontal = 12.dp),
         ) {
-            items(TrayEmojis) { emoji ->
+            items(emojis) { emoji ->
                 Box(
                     modifier = Modifier
                         .aspectRatio(1f)
@@ -74,7 +86,7 @@ fun StickerBottomSheetContent(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(stickerUrls) { url ->
+            items(stickers) { url ->
                 Box(
                     modifier = Modifier
                         .aspectRatio(1f)
@@ -84,7 +96,7 @@ fun StickerBottomSheetContent(
                 ) {
                     AsyncImage(
                         model = url,
-                        contentDescription = "Stiker",
+                        contentDescription = stringResource(R.string.zm_sticker),
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit,
                     )
@@ -95,43 +107,3 @@ fun StickerBottomSheetContent(
 }
 
 private val TrayHeight = 360.dp
-
-private val TrayEmojis = listOf(
-    "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇",
-    "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚",
-    "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩",
-    "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣",
-    "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬",
-    "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗",
-    "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯",
-    "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐",
-    "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈",
-    "👋", "👌", "✌️", "🤞", "🤟", "🤘", "👍", "👎", "👏", "🙌",
-    "🙏", "💪", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍",
-    "💔", "💕", "💯", "🔥", "✨", "🎉", "🎂", "🌹", "⭐", "☀️",
-)
-
-private val stickerUrls = listOf(
-    "https://cdn-icons-png.flaticon.com/256/4392/4392471.png",
-    "https://cdn-icons-png.flaticon.com/256/4392/4392522.png",
-    "https://cdn-icons-png.flaticon.com/256/4213/4213612.png",
-    "https://cdn-icons-png.flaticon.com/256/4213/4213605.png",
-    "https://cdn-icons-png.flaticon.com/256/4213/4213517.png",
-    "https://cdn-icons-png.flaticon.com/256/4228/4228685.png",
-    "https://cdn-icons-png.flaticon.com/256/4329/4329960.png",
-    "https://cdn-icons-png.flaticon.com/256/6702/6702479.png",
-    "https://cdn-icons-png.flaticon.com/256/6852/6852961.png",
-    "https://cdn-icons-png.flaticon.com/256/6852/6852993.png",
-    "https://cdn-icons-png.flaticon.com/256/8137/8137252.png",
-    "https://cdn-icons-png.flaticon.com/256/8137/8137255.png",
-    "https://cdn-icons-png.flaticon.com/256/8137/8137228.png",
-    "https://cdn-icons-png.flaticon.com/256/8137/8137225.png",
-    "https://cdn-icons-png.flaticon.com/256/8137/8137202.png",
-    "https://cdn-icons-png.flaticon.com/256/4392/4392452.png",
-    "https://cdn-icons-png.flaticon.com/256/4392/4392455.png",
-    "https://cdn-icons-png.flaticon.com/256/4392/4392459.png",
-    "https://cdn-icons-png.flaticon.com/256/4392/4392462.png",
-    "https://cdn-icons-png.flaticon.com/256/4392/4392465.png",
-    "https://cdn-icons-png.flaticon.com/256/4392/4392467.png",
-    "https://cdn-icons-png.flaticon.com/256/4392/4392469.png",
-)

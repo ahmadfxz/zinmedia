@@ -58,13 +58,18 @@ internal class ImageFilterView @JvmOverloads constructor(
 
     internal fun setSourceBitmap(sourceBitmap: Bitmap?) {
         /* if (mSourceBitmap != null && mSourceBitmap.sameAs(sourceBitmap)) {
-            //mCurrentEffect = NONE;
         }*/
         mSourceBitmap = sourceBitmap
         mInitialized = false
     }
 
-    override fun onSurfaceCreated(gl: GL10, config: EGLConfig) {}
+    override fun onSurfaceCreated(gl: GL10, config: EGLConfig) {
+        // Surface baru = konteks GL baru (mis. view dipasang ulang setelah dilepas). Efek, tekstur,
+        // dan EffectContext lama milik konteks yang sudah hilang: buang (tanpa release) lalu buat ulang.
+        mEffect = null
+        mEffectContext = null
+        mInitialized = false
+    }
     override fun onSurfaceChanged(gl: GL10, width: Int, height: Int) {
         mTexRenderer.updateViewSize(width, height)
     }
@@ -79,7 +84,6 @@ internal class ImageFilterView @JvmOverloads constructor(
                 mInitialized = true
             }
             if (mCurrentEffect != PhotoFilter.NONE || mCustomEffect != null) {
-                //if an effect is chosen initialize it and apply it to the texture
                 initEffect()
                 applyEffect()
             }
@@ -249,7 +253,6 @@ internal class ImageFilterView @JvmOverloads constructor(
 
     private fun renderResult() {
         if (mCurrentEffect != PhotoFilter.NONE || mCustomEffect != null) {
-            // if no effect is chosen, just render the original bitmap
             mTexRenderer.renderTexture(mTextures[1])
         } else {
             // render the result of applyEffect()

@@ -23,6 +23,7 @@ rootProject.name = "zinmedia"
 include(
     ":media:media-photoeditor",
     ":media:media-videoeditor",
+    ":media:media-composer",
     // Aplikasi demo untuk mencoba editor; tidak dipublish.
     ":sample",
 )

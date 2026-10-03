@@ -12,7 +12,7 @@ import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
 
-fun createCustomImageLoader(context: Context): ImageLoader {
+internal fun createCustomImageLoader(context: Context): ImageLoader {
     return ImageLoader.Builder(context)
         .memoryCache {
             MemoryCache.Builder()
