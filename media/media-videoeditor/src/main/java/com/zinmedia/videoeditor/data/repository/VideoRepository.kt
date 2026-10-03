@@ -156,27 +156,40 @@ internal class VideoRepository {
             )
 
             // Filter warna hanya untuk video, sebelum ditempatkan di kanvas.
-            loadLutCubeFromUrl(cubeUrl)?.let { videoEffects.add(SingleColorLut.createFromCube(it)) }
+            if (cubeUrl.isNotBlank()) {
+                loadLutCubeFromUrl(cubeUrl)?.let { videoEffects.add(SingleColorLut.createFromCube(it)) }
+            }
             videoEffects.add(CanvasPlacement(targetWidth, targetHeight, canvas, heightRatio))
 
             // Overlay ditempatkan relatif terhadap kanvas; ukurannya dari lebar relatif di preview.
-            val textureOverlays = overlays.map { overlay ->
+            val textureOverlays = overlays.mapNotNull { overlay ->
                 val bitmap = overlay.bitmap.asAndroidBitmap()
                 val overlayScale = if (overlay.widthFraction > 0f) {
                     overlay.widthFraction / canvas.width * targetWidth / bitmap.width
                 } else {
                     overlay.scale
                 }
-                val (anchorX, anchorY) = canvas.toNdc(
+                val (centerX, centerY) = canvas.toNdc(
                     (overlay.posXpx + 1f) / 2f,
                     (1f - overlay.posYpx) / 2f * heightRatio,
                 )
+                // Pusat overlay bisa di luar kanvas (terpotong di tepi area editor).
+                val placement = placeOverlay(
+                    centerX = centerX,
+                    centerY = centerY,
+                    halfWidthPx = bitmap.width * overlayScale / 2f,
+                    halfHeightPx = bitmap.height * overlayScale / 2f,
+                    rotationDegrees = overlay.rotation,
+                    outputWidth = targetWidth,
+                    outputHeight = targetHeight,
+                ) ?: return@mapNotNull null
                 BitmapOverlay.createStaticBitmapOverlay(
                     bitmap,
                     StaticOverlaySettings.Builder()
                         .setScale(overlayScale, overlayScale)
                         .setRotationDegrees(overlay.rotation)
-                        .setBackgroundFrameAnchor(anchorX, anchorY)
+                        .setBackgroundFrameAnchor(placement.backgroundX, placement.backgroundY)
+                        .setOverlayFrameAnchor(placement.overlayX, placement.overlayY)
                         .build(),
                 )
             }
@@ -286,8 +299,10 @@ internal fun fitExportSize(width: Int, height: Int): Pair<Int, Int> {
     val maxW = if (landscape) MAX_LONG_SIDE else MAX_SHORT_SIDE
     val maxH = if (landscape) MAX_SHORT_SIDE else MAX_LONG_SIDE
     val scale = minOf(maxW.toFloat() / width, maxH.toFloat() / height, 1f)
-    fun aligned(v: Float) = (v.toInt() / ALIGNMENT * ALIGNMENT).coerceAtLeast(ALIGNMENT)
-    return aligned(width * scale) to aligned(height * scale)
+    // Kelipatan 16 terdekat (video sangat kecil tidak menyusut), tanpa melewati batas maksimum.
+    fun aligned(v: Float, max: Int) =
+        (((v + ALIGNMENT / 2f).toInt() / ALIGNMENT) * ALIGNMENT).coerceIn(ALIGNMENT, max)
+    return aligned(width * scale, maxW) to aligned(height * scale, maxH)
 }
 
 /** Lebar×tinggi video sebagaimana tampil (ditukar bila metadata rotasi 90°/270°). */

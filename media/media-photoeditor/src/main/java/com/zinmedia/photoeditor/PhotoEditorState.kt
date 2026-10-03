@@ -134,6 +134,7 @@ public class PhotoEditorState(
 
     /** Simpan hasil edit sebagai PNG di folder milik library; mengembalikan URI FileProvider. */
     public suspend fun exportToUri(): Uri {
+        check(isLoaded && !loadFailed) { "Foto belum dimuat atau gagal dimuat: $sourceUri" }
         // Teks/stiker tidak dihapus dari kanvas, agar hasil edit tetap utuh bila pengiriman diulang.
         val bitmap = editor.saveAsBitmap(
             SaveSettings.Builder()

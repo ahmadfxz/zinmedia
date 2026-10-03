@@ -114,11 +114,13 @@ internal class PhotoEditorView @JvmOverloads constructor(
 
     internal suspend fun saveFilter(): Bitmap {
         return if (mImageFilterView.isVisible) {
+            // Batas waktu: bila permukaan GL tidak pernah menggambar (mis. tanpa ukuran), jangan
+            // menunggu selamanya; pakai gambar sumber tanpa filter GL.
             val saveBitmap = try {
-                mImageFilterView.saveBitmap()
+                kotlinx.coroutines.withTimeoutOrNull(FILTER_CAPTURE_TIMEOUT_MS) { mImageFilterView.saveBitmap() }
             } catch (t: Throwable) {
                 throw RuntimeException("Couldn't save bitmap with filter", t)
-            }
+            } ?: return mImgSource.bitmap ?: throw IllegalStateException("Tidak ada gambar untuk disimpan")
             mImgSource.setImageBitmap(saveBitmap)
             mImageFilterView.visibility = GONE
             saveBitmap
@@ -145,6 +147,7 @@ internal class PhotoEditorView @JvmOverloads constructor(
 
     internal companion object {
         private const val TAG = "PhotoEditorView"
+        private const val FILTER_CAPTURE_TIMEOUT_MS = 3_000L
         private const val imgSrcId = 1
         private const val shapeSrcId = 2
         private const val glFilterId = 3

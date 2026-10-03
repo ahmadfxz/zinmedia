@@ -29,6 +29,7 @@ import java.io.File
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open single
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open nocaption
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open videoonly   # atau: photoonly
+ *   adb shell am start -n com.zinmedia.sample/.MainActivity --es path /sdcard/Android/data/com.zinmedia.sample/files/a.jpg
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open video_rotated
  */
 class MainActivity : ComponentActivity() {
@@ -102,7 +103,13 @@ class MainActivity : ComponentActivity() {
             addView(content)
         })
 
-        if (savedInstanceState == null) intent.getStringExtra("open")?.let(::openSample)
+        if (savedInstanceState == null) {
+            intent.getStringExtra("open")?.let(::openSample)
+            // Uji media sendiri: file di folder app (adb push ke /sdcard/Android/data/<pkg>/files/).
+            intent.getStringExtra("path")?.let { path ->
+                editorLauncher.launch(MediaComposerActivity.intent(this, listOf(Uri.fromFile(File(path)))))
+            }
+        }
     }
 
     private fun button(label: String, onClick: () -> Unit) =

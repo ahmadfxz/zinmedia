@@ -87,7 +87,10 @@ internal class PhotoSaverTask(
         return bitmap
     }
 
-    /** Batas foto yang tampil ∪ batas tiap lapisan, dalam koordinat [photoEditorView]. */
+    /**
+     * Batas gambar hasil, dalam koordinat [photoEditorView]: area foto bila semua lapisan ada di
+     * dalamnya; bila ada lapisan yang keluar dari foto, seluruh area editor (batas maksimal).
+     */
     private fun contentBounds(): Rect {
         val root = photoEditorView
         val image = root.source
@@ -99,6 +102,7 @@ internal class PhotoSaverTask(
             content.offset(image.paddingLeft.toFloat(), image.paddingTop.toFloat())
         }
         mapToAncestor(image, root, content)
+        val photo = RectF(content)
 
         for (i in 0 until root.childCount) {
             val child = root.getChildAt(i)
@@ -116,10 +120,11 @@ internal class PhotoSaverTask(
             }
             content.union(layer)
         }
-        if (!content.intersect(0f, 0f, root.width.toFloat(), root.height.toFloat())) {
-            content.set(0f, 0f, root.width.toFloat(), root.height.toFloat())
-        }
-        return Rect().also { content.roundOut(it) }
+        // Ada lapisan keluar dari foto (toleransi 1 px): pakai seluruh area editor, sisanya hitam.
+        val overflows = content.left < photo.left - 1f || content.top < photo.top - 1f ||
+            content.right > photo.right + 1f || content.bottom > photo.bottom + 1f
+        val result = if (overflows) RectF(0f, 0f, root.width.toFloat(), root.height.toFloat()) else photo
+        return Rect().also { result.roundOut(it) }
     }
 
     /** Petakan [rect] (koordinat [view]) ke koordinat [ancestor], termasuk transformasi view. */

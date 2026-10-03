@@ -19,7 +19,7 @@ import javax.microedition.khronos.opengles.GL10
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  *
@@ -125,8 +125,10 @@ internal class ImageFilterView @JvmOverloads constructor(
     }
 
     internal suspend fun saveBitmap(): Bitmap = mutex.withLock {
-        suspendCoroutine { continuation ->
+        // Bisa dibatalkan (mis. batas waktu): penantian frame dibersihkan agar tidak tertahan.
+        suspendCancellableCoroutine { continuation ->
             bitmapReadyContinuation = continuation
+            continuation.invokeOnCancellation { queueEvent { bitmapReadyContinuation = null } }
             requestRender()
         }
     }

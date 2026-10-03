@@ -41,8 +41,9 @@ internal data class OverlayBox(
 )
 
 /**
- * Kanvas hasil ekspor: frame video diperluas agar memuat semua overlay yang keluar frame (area
- * tambahannya hitam), dibatasi [limit] (area editor di layar, berpusat di tengah video).
+ * Kanvas hasil ekspor: seukuran frame video bila semua overlay ada di dalamnya; bila ada yang
+ * keluar frame, kanvas memenuhi [limit] (area editor di layar, berpusat di tengah video) dengan
+ * area tambahan hitam.
  *
  * @param heightRatio tinggi / lebar frame video.
  * @param limit ukuran maksimum kanvas (lebar, tinggi) dalam satuan lebar video; `null` = tanpa perluasan.
@@ -65,10 +66,62 @@ internal fun exportCanvas(boxes: List<OverlayBox>, heightRatio: Float, limit: Pa
         val cy = (1f - box.anchorY) / 2f * heightRatio
         canvas = canvas.union(CanvasRect(cx - halfW, cy - halfH, cx + halfW, cy + halfH))
     }
+    // Semua overlay di dalam frame (toleransi pembulatan): hasil seukuran video.
+    val overflows = canvas.left < -Tolerance || canvas.top < -Tolerance ||
+        canvas.right > 1f + Tolerance || canvas.bottom > heightRatio + Tolerance
+    if (!overflows) return video
+    // Ada yang keluar frame: kanvas memenuhi batas maksimal (area editor), sisanya hitam.
     val (maxW, maxH) = limit
-    val bounds = CanvasRect(
+    return CanvasRect(
         0.5f - maxW / 2f, heightRatio / 2f - maxH / 2f,
         0.5f + maxW / 2f, heightRatio / 2f + maxH / 2f,
     ).union(video)
-    return canvas.intersect(bounds)
+}
+
+/** Toleransi (satuan lebar video) agar overlay yang menempel di tepi tidak dianggap keluar. */
+private const val Tolerance = 0.002f
+
+/** Titik tempel overlay untuk Media3: di latar (NDC kanvas) dan di overlay (NDC overlay). */
+internal data class OverlayPlacement(
+    val backgroundX: Float,
+    val backgroundY: Float,
+    val overlayX: Float = 0f,
+    val overlayY: Float = 0f,
+)
+
+/**
+ * Tempatkan overlay berpusat di ([centerX], [centerY]) (NDC kanvas, y ke atas). Media3 hanya
+ * menerima titik tempel latar di [-1, 1]; bila pusat overlay di luar kanvas, titik tempel latar
+ * dijepit ke tepi dan titik tempel overlay digeser sebaliknya (rotasi diperhitungkan), sehingga
+ * posisi overlay tetap sama dan bagian yang masih di kanvas tetap tampil.
+ *
+ * @param halfWidthPx setengah lebar overlay di video hasil (px, setelah skala).
+ * @return `null` bila overlay seluruhnya di luar kanvas (tidak perlu digambar).
+ */
+internal fun placeOverlay(
+    centerX: Float,
+    centerY: Float,
+    halfWidthPx: Float,
+    halfHeightPx: Float,
+    rotationDegrees: Float,
+    outputWidth: Int,
+    outputHeight: Int,
+): OverlayPlacement? {
+    if (centerX in -1f..1f && centerY in -1f..1f) return OverlayPlacement(centerX, centerY)
+    if (halfWidthPx <= 0f || halfHeightPx <= 0f) return null
+    val backgroundX = centerX.coerceIn(-1f, 1f)
+    val backgroundY = centerY.coerceIn(-1f, 1f)
+    // Selisih pusat terhadap titik tempel, dalam px video hasil (y ke atas).
+    val dx = (centerX - backgroundX) * outputWidth / 2f
+    val dy = (centerY - backgroundY) * outputHeight / 2f
+    // Ke sistem koordinat overlay (sebelum rotasi): putar balik.
+    val radians = Math.toRadians(-rotationDegrees.toDouble())
+    val c = cos(radians).toFloat()
+    val s = sin(radians).toFloat()
+    val localX = dx * c - dy * s
+    val localY = dx * s + dy * c
+    val overlayX = -localX / halfWidthPx
+    val overlayY = -localY / halfHeightPx
+    if (abs(overlayX) > 1f || abs(overlayY) > 1f) return null
+    return OverlayPlacement(backgroundX, backgroundY, overlayX, overlayY)
 }

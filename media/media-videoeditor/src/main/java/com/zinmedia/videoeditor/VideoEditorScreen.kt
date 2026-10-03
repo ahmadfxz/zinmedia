@@ -2,6 +2,7 @@
 
 package com.zinmedia.videoeditor
 
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.unit.IntSize
 import com.zinmedia.videoeditor.overlays.TrashTarget
 import androidx.compose.ui.layout.boundsInRoot
@@ -214,9 +215,10 @@ public fun VideoEditorScreen(
     // diketahui (mis. saat baru dibuka).
     val nativeVideoWidth by vm.videoWidth.collectAsState()
     val nativeVideoHeight by vm.videoHeight.collectAsState()
+    // Rasio asli (tanpa dijepit): posisi lapisan & ekspor dihitung terhadap frame video yang
+    // sebenarnya. Kotak 9:16 area editor sudah membatasi ukurannya untuk video sangat tinggi/lebar.
     val aspect = if (nativeVideoWidth > 0 && nativeVideoHeight > 0) {
-        (nativeVideoWidth.toFloat() / nativeVideoHeight.toFloat())
-            .coerceIn(9f / 21f, 21f / 9f)
+        nativeVideoWidth.toFloat() / nativeVideoHeight.toFloat()
     } else {
         9f / 16f
     }
@@ -254,7 +256,8 @@ public fun VideoEditorScreen(
             .fillMaxSize()
             .background(EditorColors.Background)
     ) {
-        // Video di tengah area aman, toolbar menimpa di atas/bawah.
+        // Area editor: kotak 9:16 di tengah area aman (tanpa status & navigation bar); video pas
+        // di dalamnya, toolbar menimpa di atas/bawah. Kotak ini juga batas maksimal hasil ekspor.
         var areaSize by remember { mutableStateOf(IntSize.Zero) }
         LaunchedEffect(areaSize, videoWidthPx) {
             vm.setPreviewLayout(videoWidthPx, areaSize.width.toFloat(), areaSize.height.toFloat())
@@ -265,7 +268,14 @@ public fun VideoEditorScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
+        ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .aspectRatio(EditorAreaAspect)
                 .onSizeChanged { areaSize = it }
+                // Stiker/teks/coretan hanya tampil di dalam area editor (yang juga diekspor).
+                .clipToBounds()
         ) {
             Box(
                 contentAlignment = Alignment.Center,
@@ -323,6 +333,7 @@ public fun VideoEditorScreen(
             }
             // Coretan boleh di luar frame video (seluas area editor); kanvas ekspor ikut diperluas.
             DrawingCanvas(drawViewModel)
+        }
         }
 
         androidx.compose.animation.AnimatedVisibility(
@@ -541,3 +552,6 @@ private fun emojiBitmap(emoji: String, sizePx: Int = 256): android.graphics.Bitm
     android.graphics.Canvas(bitmap).drawText(emoji, sizePx / 2f, baseline, paint)
     return bitmap
 }
+
+/** Rasio area editor (lebar/tinggi) = batas maksimal hasil ekspor. */
+private const val EditorAreaAspect = 9f / 16f

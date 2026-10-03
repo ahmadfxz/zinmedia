@@ -27,6 +27,11 @@ class ExportSizeTest {
         // Kanvas yang diperluas: 720x1328 -> diperkecil ke tinggi 1280, lebar 693 -> 688.
         val (w, h) = fitExportSize(720, 1328)
         assertEquals(688 to 1280, w to h)
+        // Rasio ekstrem tetap terjaga; video sangat kecil dibulatkan ke kelipatan 16 terdekat.
+        assertEquals(320 to 1280, fitExportSize(360, 1440))
+        assertEquals(1280 to 320, fitExportSize(1440, 360))
+        assertEquals(32 to 32, fitExportSize(30, 30))
+        assertEquals(720 to 720, fitExportSize(1000, 1001))
         assertEquals(0, fitExportSize(721, 1281).first % 16)
     }
 

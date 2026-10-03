@@ -3,6 +3,7 @@
     <!-- Bahasa Indonesia tidak membedakan bentuk jamak. -->
     <string name="zm_composer_processing" tools:ignore="PluralsCandidate">Memproses %1$d dari %2$d</string>
     <string name="zm_composer_failed">Gagal memproses media</string>
+    <string name="zm_composer_open_failed">Media tidak bisa dibuka</string>
     <string name="zm_composer_remove">Hapus media</string>
     <string name="zm_composer_add">Tambah media</string>
 </resources>

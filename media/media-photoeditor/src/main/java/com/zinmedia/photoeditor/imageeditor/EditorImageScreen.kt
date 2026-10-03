@@ -1,5 +1,6 @@
 package com.zinmedia.photoeditor.imageeditor
 
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -70,13 +71,20 @@ internal fun EditImageScreen(
             .fillMaxSize()
             .background(EditorColors.Background)
     ) {
-        PhotoEditorContainer(
-            photoEditorView = photoEditorView,
+        // Area editor: kotak 9:16 di tengah area aman (tanpa status & navigation bar). Foto pas di
+        // dalamnya; lapisan & coretan hanya di dalamnya; juga batas maksimal hasil ekspor.
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-        )
+        ) {
+            PhotoEditorContainer(
+                photoEditorView = photoEditorView,
+                modifier = Modifier.aspectRatio(9f / 16f)
+            )
+        }
 
         AnimatedVisibility(
             visible = showChrome,

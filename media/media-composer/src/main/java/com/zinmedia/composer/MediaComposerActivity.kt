@@ -135,8 +135,14 @@ public class MediaComposerActivity : ComponentActivity() {
         var bottomBarHeight by remember { mutableStateOf(0.dp) }
 
         // Muat semua foto di awal (maks. 5), agar lompat ke media mana pun tidak menampilkan layar kosong.
+        // Foto yang gagal dimuat (file rusak / tanpa izin baca) dikeluarkan dari daftar.
         LaunchedEffect(items.size) {
-            items.forEach { it.photo?.load() }
+            val failed = items.filter { item -> item.photo?.load() == false }
+            if (failed.isNotEmpty()) {
+                items.removeAll(failed)
+                Toast.makeText(this@MediaComposerActivity, R.string.zm_composer_open_failed, Toast.LENGTH_SHORT).show()
+                if (items.isEmpty()) finish()
+            }
         }
 
         val activeItem = items.getOrNull(pagerState.currentPage)
