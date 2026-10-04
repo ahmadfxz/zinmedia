@@ -1,5 +1,10 @@
 package com.zinmedia.camera
 
+import android.util.Size
+import androidx.camera.core.resolutionselector.ResolutionStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.ImageAnalysis
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
@@ -49,6 +54,8 @@ internal class CameraSession(
     private var provider: ProcessCameraProvider? = null
     private var camera: Camera? = null
     private var videoCapture: VideoCapture<Recorder>? = null
+    private var faceAnalyzer: ImageAnalysis.Analyzer? = null
+    private val analysisExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     var lensFacing by mutableIntStateOf(CameraSelector.LENS_FACING_BACK)
         private set
@@ -89,19 +96,43 @@ internal class CameraSession(
         val video = VideoCapture.Builder(recorder)
             .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
             .build()
-        val group = UseCaseGroup.Builder()
+        // Analisis frame (efek wajah) hanya dipasang saat efek aktif: frame kecil, hanya yang terbaru.
+        val analysis = faceAnalyzer?.let { analyzer ->
+            ImageAnalysis.Builder()
+                .setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
+                        .setResolutionStrategy(
+                            ResolutionStrategy(Size(640, 360), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER)
+                        )
+                        .build()
+                )
+                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+                .also { it.setAnalyzer(analysisExecutor, analyzer) }
+        }
+        fun group(withAnalysis: Boolean) = UseCaseGroup.Builder()
             .addUseCase(preview)
             .addUseCase(video)
+            .apply { if (withAnalysis && analysis != null) addUseCase(analysis) }
             .addEffect(effect)
             .apply { previewView.viewPort?.let(::setViewPort) }
             .build()
         provider.unbindAll()
         val selector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
         camera = try {
-            provider.bindToLifecycle(lifecycleOwner, selector, group)
+            provider.bindToLifecycle(lifecycleOwner, selector, group(withAnalysis = true))
         } catch (e: IllegalArgumentException) {
-            Log.e(TAG, "Gagal memakai kamera", e)
-            null
+            // Sebagian HP tidak sanggup preview + rekam + analisis sekaligus: kamera tetap jalan tanpa efek wajah.
+            Log.w(TAG, "Kombinasi kamera tidak didukung, tanpa analisis wajah", e)
+            try {
+                provider.unbindAll()
+                provider.bindToLifecycle(lifecycleOwner, selector, group(withAnalysis = false))
+            } catch (e2: IllegalArgumentException) {
+                Log.e(TAG, "Gagal memakai kamera", e2)
+                null
+            }
         }
         videoCapture = video
         camera?.cameraInfo?.let { info ->
@@ -123,6 +154,19 @@ internal class CameraSession(
     fun focusAt(x: Float, y: Float) {
         val point = previewView.meteringPointFactory.createPoint(x, y)
         camera?.cameraControl?.startFocusAndMetering(FocusMeteringAction.Builder(point).build())
+    }
+
+    /** Pasang/lepas penganalisis frame untuk efek wajah (kamera diikat ulang). */
+    fun setFaceAnalyzer(analyzer: ImageAnalysis.Analyzer?) {
+        if (faceAnalyzer === analyzer) return
+        faceAnalyzer = analyzer
+        bind()
+    }
+
+    fun setFaceOverlayImage(bitmap: android.graphics.Bitmap?) = processor.setOverlayImage(bitmap)
+
+    fun setFaceQuads(quads: List<com.zinmedia.camera.face.FaceQuad>) {
+        processor.faceQuads = quads
     }
 
     fun setTorch(on: Boolean) {
@@ -172,6 +216,7 @@ internal class CameraSession(
 
     fun release() {
         provider?.unbindAll()
+        analysisExecutor.shutdown()
         processor.release()
     }
 

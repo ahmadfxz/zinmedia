@@ -11,7 +11,7 @@ android {
     resourcePrefix = "zm_"
 
     defaultConfig {
-        minSdk = 23
+        minSdk = 24
     }
 
     buildTypes {

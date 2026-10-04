@@ -1,5 +1,9 @@
 package com.zinmedia.camera
 
+import coil3.toBitmap
+import coil3.request.allowHardware
+import com.zinmedia.camera.face.ensureFaceModel
+import com.zinmedia.camera.face.FaceTracker
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
@@ -78,6 +82,18 @@ internal class CameraState(
         private set
     var showSpeed by mutableStateOf(false)
     var showFilters by mutableStateOf(false)
+    var showFaceEffects by mutableStateOf(false)
+
+    /** Efek wajah dari aplikasi ([CameraConfig.faceEffects]). */
+    val faceEffects: List<FaceEffect> = CameraConfig.faceEffects
+    /** Efek wajah aktif (-1 = tanpa efek). */
+    var faceEffectIndex by mutableIntStateOf(-1)
+        private set
+    /** Progres unduh/siapkan model wajah (0..1), `null` bila tidak sedang menyiapkan. */
+    var faceEffectLoading by mutableStateOf<Float?>(null)
+        private set
+    private var faceTracker: FaceTracker? = null
+    private var faceJob: Job? = null
 
     val segments = mutableStateListOf<Segment>()
     /** Foto yang sudah diambil (mode Foto, bila [maxPhotos] > 1). */
@@ -341,7 +357,65 @@ internal class CameraState(
         }
     }
 
+    // ---- efek wajah ----
+
+    /** Pilih efek wajah ([index] -1 = matikan). Model diunduh saat pertama kali dipakai. */
+    fun selectFaceEffect(index: Int) {
+        faceJob?.cancel()
+        if (index !in faceEffects.indices) {
+            faceEffectIndex = -1
+            faceEffectLoading = null
+            faceTracker?.effect = null
+            session.setFaceOverlayImage(null)
+            session.setFaceAnalyzer(null)
+            return
+        }
+        faceEffectIndex = index
+        val effect = faceEffects[index]
+        faceJob = scope.launch {
+            try {
+                val tracker = faceTracker ?: run {
+                    faceEffectLoading = 0f
+                    val model = ensureFaceModel(context, CameraConfig.faceModelUrl) { faceEffectLoading = it }
+                    withContext(Dispatchers.Default) {
+                        FaceTracker(
+                            context = context,
+                            modelFile = model,
+                            maxFaces = CameraConfig.maxFaces.coerceIn(1, 3),
+                            onQuads = session::setFaceQuads,
+                        )
+                    }.also { faceTracker = it }
+                }
+                val image = loadEffectImage(effect.imageUrl) ?: error("Gambar efek tidak bisa dimuat")
+                tracker.effect = effect to image.height.toFloat() / image.width.coerceAtLeast(1)
+                session.setFaceOverlayImage(image)
+                session.setFaceAnalyzer(tracker)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Efek wajah gagal disiapkan", e)
+                faceEffectIndex = -1
+                session.setFaceOverlayImage(null)
+                session.setFaceAnalyzer(null)
+            } finally {
+                faceEffectLoading = null
+            }
+        }
+    }
+
+    private suspend fun loadEffectImage(url: String): Bitmap? {
+        val request = coil3.request.ImageRequest.Builder(context)
+            .data(url)
+            .allowHardware(false)
+            .build()
+        val result = coil3.SingletonImageLoader.get(context).execute(request)
+        return (result as? coil3.request.SuccessResult)?.image?.toBitmap()
+    }
+
     fun release() {
+        faceJob?.cancel()
+        faceTracker?.close()
+        faceTracker = null
         cancelCountdown()
         recording?.stop()
         recording = null

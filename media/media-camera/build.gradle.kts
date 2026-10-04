@@ -11,7 +11,7 @@ android {
     resourcePrefix = "zm_"
 
     defaultConfig {
-        minSdk = 23
+        minSdk = 24
     }
 
     buildTypes {
@@ -48,6 +48,10 @@ dependencies {
     implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.media3.effect)
     implementation(libs.androidx.media3.common)
+    // Efek wajah (titik wajah per frame).
+    implementation(libs.mediapipe.tasks.vision)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

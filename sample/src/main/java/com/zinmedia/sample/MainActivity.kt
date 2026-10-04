@@ -11,6 +11,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import com.zinmedia.camera.CameraActivity
+import com.zinmedia.camera.CameraConfig
+import com.zinmedia.camera.FaceAnchor
+import com.zinmedia.camera.FaceEffect
+import com.zinmedia.camera.FaceSide
 import com.zinmedia.composer.AllowedMedia
 import com.zinmedia.composer.MediaComposer
 import com.zinmedia.composer.MediaComposerActivity
@@ -76,6 +80,21 @@ class MainActivity : ComponentActivity() {
             stickers = listOf("heart", "star", "wow").map { "file:///android_asset/stickers/$it.png" },
             // Warna utama milik aplikasi (tombol kirim, dialog, dll).
             accentColor = 0xFF1E88E5.toInt(),
+        )
+        // Efek wajah kamera (gambar PNG milik aplikasi).
+        CameraConfig.faceEffects = listOf(
+            FaceEffect("Kacamata", "file:///android_asset/face/glasses.png", FaceAnchor.Eyes),
+            FaceEffect("Topi", "file:///android_asset/face/hat.png", FaceAnchor.Head),
+            FaceEffect("Kumis", "file:///android_asset/face/mustache.png", FaceAnchor.Mouth),
+            FaceEffect("Badut", "file:///android_asset/face/nose.png", FaceAnchor.Nose),
+            FaceEffect("Kucing", "file:///android_asset/face/catears.png", FaceAnchor.Head, offsetY = 0.2f),
+            FaceEffect("Bunga", "file:///android_asset/face/flower.png", FaceAnchor.Ear, side = FaceSide.Left),
+            FaceEffect("Pipi", "file:///android_asset/face/heart.png", FaceAnchor.Cheek, side = FaceSide.Both),
+            FaceEffect("Mata", "file:///android_asset/face/heart.png", FaceAnchor.Eye, side = FaceSide.Right),
+            FaceEffect("Bintang", "file:///android_asset/face/star.png", FaceAnchor.Forehead),
+            FaceEffect("Janggut", "file:///android_asset/face/beard.png", FaceAnchor.Chin),
+            FaceEffect("Topeng", "file:///android_asset/face/eyemask.png", FaceAnchor.Eyes),
+            FaceEffect("Wajah", "file:///android_asset/face/facemask.png", FaceAnchor.Face),
         )
 
         resultView = ResultView(this)

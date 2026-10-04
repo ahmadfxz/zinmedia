@@ -180,6 +180,17 @@ internal fun CameraScreen(
                 CameraToolbar(state)
             }
 
+            state.faceEffectLoading?.let { progress ->
+                Text(
+                    text = stringResource(R.string.zm_camera_face_loading, (progress * 100).roundToInt()),
+                    style = LabelStyle.copy(fontSize = 13.sp),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
+
             state.countdown?.let { second ->
                 Text(
                     text = second.toString(),
@@ -212,6 +223,9 @@ internal fun CameraScreen(
         ) {
             AnimatedVisibility(visible = state.showFilters && !state.isRecording) {
                 FilterStrip(state)
+            }
+            AnimatedVisibility(visible = state.showFaceEffects && !state.isRecording) {
+                FaceEffectStrip(state)
             }
             AnimatedVisibility(visible = state.showSpeed && !state.isRecording && state.mode != CaptureMode.Photo) {
                 SpeedSelector(state)
@@ -396,7 +410,10 @@ private fun CameraToolbar(state: CameraState) {
                 active = state.showSpeed || state.speed != 1f,
                 onClick = {
                     state.showSpeed = !state.showSpeed
-                    if (state.showSpeed) state.showFilters = false
+                    if (state.showSpeed) {
+                        state.showFilters = false
+                        state.showFaceEffects = false
+                    }
                 },
             )
         }
@@ -406,9 +423,26 @@ private fun CameraToolbar(state: CameraState) {
             active = state.showFilters || state.filterIndex != 0,
             onClick = {
                 state.showFilters = !state.showFilters
-                if (state.showFilters) state.showSpeed = false
+                if (state.showFilters) {
+                    state.showSpeed = false
+                    state.showFaceEffects = false
+                }
             },
         )
+        if (state.faceEffects.isNotEmpty()) {
+            ToolButton(
+                icon = R.drawable.zm_ic_camera_face,
+                label = stringResource(R.string.zm_camera_face_effects),
+                active = state.showFaceEffects || state.faceEffectIndex >= 0,
+                onClick = {
+                    state.showFaceEffects = !state.showFaceEffects
+                    if (state.showFaceEffects) {
+                        state.showFilters = false
+                        state.showSpeed = false
+                    }
+                },
+            )
+        }
         ToolButton(
             icon = R.drawable.zm_ic_camera_beauty,
             label = stringResource(R.string.zm_camera_beauty),
@@ -909,3 +943,65 @@ private const val TrayItemOutMs = 160
 
 /** Lama animasi tutup deretan untuk [count] foto (sampai foto terakhir selesai keluar). */
 private fun trayCloseDurationMs(count: Int): Long = (count - 1).coerceAtLeast(0) * TrayStaggerOutMs + TrayItemOutMs + 20
+
+/** Pilihan efek wajah: "Tanpa" lalu efek dari aplikasi (gambar efeknya sebagai pratinjau). */
+@Composable
+private fun FaceEffectStrip(state: CameraState) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+    ) {
+        item {
+            FaceEffectItem(
+                label = stringResource(R.string.zm_camera_face_none),
+                imageUrl = null,
+                selected = state.faceEffectIndex < 0,
+                onClick = { state.selectFaceEffect(-1) },
+            )
+        }
+        itemsIndexed(state.faceEffects) { index, effect ->
+            FaceEffectItem(
+                label = effect.name,
+                imageUrl = effect.imageUrl,
+                selected = index == state.faceEffectIndex,
+                onClick = { state.selectFaceEffect(index) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun FaceEffectItem(label: String, imageUrl: String?, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(64.dp)
+            .clickable(role = Role.Button, onClick = onClick),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White.copy(alpha = 0.15f))
+                .border(
+                    width = if (selected) 2.5.dp else 0.dp,
+                    color = if (selected) Color.White else Color.Transparent,
+                    shape = RoundedCornerShape(12.dp),
+                ),
+        ) {
+            if (imageUrl != null) {
+                coil3.compose.AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    modifier = Modifier.size(44.dp),
+                )
+            } else {
+                Icon(painterResource(R.drawable.zm_ic_camera_close), null, tint = Color.White, modifier = Modifier.size(24.dp))
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(label, style = LabelStyle.copy(fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium), maxLines = 1)
+    }
+}

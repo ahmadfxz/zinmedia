@@ -9,7 +9,7 @@ Library Android (Jetpack Compose) untuk mengedit foto dan video sebelum diunggah
 | `media-photoeditor` | Editor foto: `com.zinmedia.photoeditor.ImageEditorActivity` |
 | `media-videoeditor` | Editor video: `com.zinmedia.videoeditor.VideoEditorActivity` (ekspor lewat Media3 Transformer) |
 
-Persyaratan: `minSdk` 23, `compileSdk` 36 atau lebih baru, Kotlin 2.3 atau lebih baru.
+Persyaratan: `minSdk` 24, `compileSdk` 36 atau lebih baru, Kotlin 2.3 atau lebih baru.
 
 ## Instalasi
 
@@ -31,7 +31,7 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "4.6.0"
+zinmedia = "4.7.0"
 
 [libraries]
 zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }
@@ -259,6 +259,51 @@ Urutan hasil sama dengan urutan media. Media yang tidak diedit dikembalikan deng
 - **Kontrol kamera**: balik depan/belakang (juga ketuk 2× di preview), flash (senter di kamera belakang, layar putih di kamera depan), cubit untuk zoom, ketuk untuk fokus, timer 3/10 detik, grid.
 - **Foto beruntun**: di mode Foto, tiap jepretan ditampung dulu sampai batas `maxItems`. Foto tampil sebagai tumpukan kartu miring (menggantikan tombol galeri) dengan jumlahnya; ketuk tumpukan untuk membuka deretan foto (hapus dengan ×, jumlah mis. `2/5`). Tombol Selesai membuka semuanya di editor; saat batas tercapai editor terbuka otomatis. Dengan `maxItems = 1`, foto langsung dibuka di editor.
 - **Galeri**: pilih hingga `maxItems` foto/video sekaligus (default 5).
+
+### Efek wajah
+
+Efek yang menempel di wajah (kacamata, topi, kumis, hidung badut, dan lainnya) memakai **MediaPipe Face Landmarker**. Gambar efek disediakan aplikasi (PNG, sebaiknya latar transparan):
+
+```kotlin
+CameraConfig.faceEffects = listOf(
+    FaceEffect("Kacamata", "https://cdn.contoh.com/efek/kacamata.png", FaceAnchor.Eyes),
+    FaceEffect("Topi", "file:///android_asset/efek/topi.png", FaceAnchor.Head),
+    FaceEffect("Kumis", "…/kumis.png", FaceAnchor.Mouth, scale = 1.1f),
+    FaceEffect("Bunga", "…/bunga.png", FaceAnchor.Ear, side = FaceSide.Left),
+    FaceEffect("Badut", "…/hidung.png", FaceAnchor.Nose),
+)
+```
+
+| `FaceAnchor` | Posisi & ukuran bawaan | Contoh |
+|---|---|---|
+| `Eyes` | Tengah kedua mata, selebar wajah | kacamata, topeng mata |
+| `Head` | Di atas dahi, sedikit lebih lebar dari wajah | topi, mahkota, telinga hewan |
+| `Forehead` | Tengah dahi | bindi, bintang |
+| `Nose` | Ujung hidung | hidung badut/hewan |
+| `Mouth` | Antara hidung dan bibir atas, selebar mulut | kumis |
+| `Chin` | Bibir bawah sampai dagu | janggut |
+| `Face` | Seluruh wajah | topeng wajah |
+| `Ear` | Telinga (pilih sisi dengan `side`) | bunga, anting |
+| `Cheek` | Pipi (pilih sisi dengan `side`) | rona, hati |
+| `Eye` | Masing-masing mata (pilih sisi dengan `side`) | hati di mata, monokel |
+
+Untuk `Ear`, `Cheek`, dan `Eye`, pilih sisi dengan `side = FaceSide.Left`, `FaceSide.Right`, atau `FaceSide.Both` (default):
+
+```kotlin
+FaceEffect("Bunga", "…/bunga.png", FaceAnchor.Ear, side = FaceSide.Left)   // telinga kiri saja
+FaceEffect("Rona", "…/rona.png", FaceAnchor.Cheek)                          // kedua pipi
+FaceEffect("Hati", "…/hati.png", FaceAnchor.Eye, side = FaceSide.Right)     // mata kanan saja
+```
+
+Kiri/kanan selalu sisi orangnya (bukan sisi layar), jadi tetap benar di kamera depan yang di-mirror. Saat kepala menoleh, efek di sisi yang membelakangi kamera disembunyikan. `Head` mengikuti arah kepala dalam 3D: saat menunduk bando/topi tampak di atas kepala, saat mendongak bergeser ke belakang dahi.
+
+`scale` memperbesar/memperkecil, `offsetY` menggeser ke atas (+) atau bawah (−) dalam satuan tinggi gambar. Efek ikut bergerak, membesar, dan miring mengikuti kepala, serta ikut terekam di video dan foto.
+
+- Kosong (default) = tombol **Efek** disembunyikan.
+- `CameraConfig.maxFaces` (1..3, default 1): jumlah wajah yang diberi efek sekaligus.
+- Gambar efek: PNG latar transparan, dipotong rapat ke bentuknya (tanpa ruang kosong), sekitar 512–1024 px.
+- Model (sekitar 3,6 MB) diunduh saat efek pertama kali dipakai lalu disimpan; URL-nya bisa diganti lewat `CameraConfig.faceModelUrl`. Aplikasi perlu izin `INTERNET`.
+- Ringan untuk HP murah: frame analisis kecil, frame lama dibuang, GPU dengan cadangan CPU, dan kamera tetap berjalan (tanpa efek) bila HP tidak sanggup.
 
 Hasil foto/video langsung dibuka di `MediaComposerActivity`. Kembali dari editor = kembali ke kamera (klip tetap ada). Setelah dikirim, `CameraActivity` selesai dengan hasil yang **sama persis** dengan editor gabungan (`EXTRA_RESULT_URIS`, `EXTRA_RESULT_TYPES`, `EXTRA_CAPTION`, `clipData`, `data`).
 
