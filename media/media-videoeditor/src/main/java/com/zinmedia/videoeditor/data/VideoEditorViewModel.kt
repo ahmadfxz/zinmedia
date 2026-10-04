@@ -68,6 +68,8 @@ internal data class Overlay(
     val rotation: Float = 0f,
     val widthFraction: Float = 0f,
     val textLayer: TextLayer? = null,
+    /** Piksel [bitmap] per piksel preview (teks dirender lebih besar agar tajam di hasil ekspor). */
+    val pixelScale: Float = 1f,
 )
 
 @UnstableApi

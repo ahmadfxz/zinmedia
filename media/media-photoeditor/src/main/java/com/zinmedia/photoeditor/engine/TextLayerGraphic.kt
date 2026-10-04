@@ -26,8 +26,8 @@ internal class TextLayerGraphic(
     var layer: Any? = null
         private set
 
-    fun buildView(image: Bitmap, layer: Any) {
-        imageView?.setImageBitmap(image)
+    fun buildView(image: Bitmap, layer: Any, pixelScale: Float = 1f) {
+        imageView?.let { setTextImage(it, image, pixelScale) }
         this.layer = layer
         rootView.setTag(R.id.zm_tag_text_layer, layer)
     }

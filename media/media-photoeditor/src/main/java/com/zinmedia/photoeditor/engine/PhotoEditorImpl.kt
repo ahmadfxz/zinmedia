@@ -1,5 +1,6 @@
 package com.zinmedia.photoeditor.engine
 
+import kotlin.math.roundToInt
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
@@ -55,19 +56,29 @@ internal class PhotoEditorImpl @SuppressLint("ClickableViewAccessibility") const
         addToEditor(sticker)
     }
 
-    override fun addTextLayer(image: Bitmap, layer: Any) {
+    override fun addTextLayer(image: Bitmap, layer: Any, pixelScale: Float) {
         drawingView.enableDrawing(false)
         val graphic = TextLayerGraphic(photoEditorView, getMultiTouchListener(isTextPinchScalable), viewState, mGraphicManager)
-        graphic.buildView(image, layer)
+        graphic.buildView(image, layer, pixelScale)
         addToEditor(graphic)
     }
 
-    override fun editTextLayer(view: View, image: Bitmap, layer: Any) {
+    override fun editTextLayer(view: View, image: Bitmap, layer: Any, pixelScale: Float) {
         if (!viewState.containsAddedView(view)) return
-        view.findViewById<ImageView>(R.id.imgPhotoEditorImage)?.setImageBitmap(image)
+        view.findViewById<ImageView>(R.id.imgPhotoEditorImage)?.let { setTextImage(it, image, pixelScale) }
         view.setTag(R.id.zm_tag_text_layer, layer)
         mGraphicManager.updateView(view)
     }
+
+    override val photoPixelScale: Float
+        get() {
+            val image = photoEditorView.source
+            val drawable = image.drawable ?: return 1f
+            val shown = android.graphics.RectF(0f, 0f, drawable.intrinsicWidth.toFloat(), drawable.intrinsicHeight.toFloat())
+            image.imageMatrix.mapRect(shown)
+            if (shown.width() <= 0f) return 1f
+            return (drawable.intrinsicWidth / shown.width()).coerceIn(1f, MAX_TEXT_PIXEL_SCALE)
+        }
 
     override fun removeLayer(view: View) {
         mGraphicManager.removeView(view)
@@ -230,5 +241,18 @@ internal class PhotoEditorImpl @SuppressLint("ClickableViewAccessibility") const
             mDetector.onTouchEvent(event)
         }
         photoEditorView.setClipSourceImage(builder.clipSourceImage)
+    }
+}
+
+/** Batas perbesaran bitmap teks (hemat memori). */
+private const val MAX_TEXT_PIXEL_SCALE = 4f
+
+/** Tampilkan [image] seukuran layar (`piksel / pixelScale`); bitmap tetap resolusi penuh untuk ekspor. */
+internal fun setTextImage(view: ImageView, image: Bitmap, pixelScale: Float) {
+    view.setImageBitmap(image)
+    val scale = pixelScale.coerceAtLeast(1f)
+    view.layoutParams = view.layoutParams.apply {
+        width = (image.width / scale).roundToInt().coerceAtLeast(1)
+        height = (image.height / scale).roundToInt().coerceAtLeast(1)
     }
 }

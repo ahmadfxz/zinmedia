@@ -69,7 +69,8 @@ internal class PhotoEditorView @JvmOverloads constructor(
     private fun setupImageSource(): LayoutParams {
         mImgSource.id = imgSrcId
         mImgSource.adjustViewBounds = true
-        mImgSource.scaleType = ImageView.ScaleType.CENTER_INSIDE
+        // FIT_CENTER: foto lebih kecil dari area juga diperbesar, sama seperti tampilan filter GL.
+        mImgSource.scaleType = ImageView.ScaleType.FIT_CENTER
 
         var widthParam = ViewGroup.LayoutParams.MATCH_PARENT
         if (clipSourceImage) {

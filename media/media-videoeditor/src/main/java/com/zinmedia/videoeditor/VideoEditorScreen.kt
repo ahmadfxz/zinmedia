@@ -513,8 +513,10 @@ public fun VideoEditorScreen(
                 editingText = null
             },
             onDone = { layer, layoutWidthPx ->
-                // Gambar yang sama persis dengan tampilan di mode teks; ukuran hasil ekspor ikut preview.
+                // Gambar yang sama persis dengan tampilan di mode teks, dirender di resolusi hasil
+                // ekspor (tidak bergantung ukuran layar) agar tetap tajam.
                 val typeface = fontManager.getFont(layer.fontIndex)
+                val pixelScale = vm.drawingScale(videoWidthPx).coerceAtMost(MaxTextPixelScale)
                 val image = renderTextLayer(
                     layer = layer,
                     fontFamily = FontFamily(typeface),
@@ -522,11 +524,14 @@ public fun VideoEditorScreen(
                     measurer = textMeasurer,
                     density = density,
                     layoutWidthPx = layoutWidthPx,
+                    scale = pixelScale,
                 )
                 if (editing != null) {
-                    vm.updateOverlay(editing.copy(bitmap = image, textLayer = layer, widthFraction = 0f))
+                    vm.updateOverlay(
+                        editing.copy(bitmap = image, textLayer = layer, widthFraction = 0f, pixelScale = pixelScale)
+                    )
                 } else {
-                    vm.addOverlay(Overlay(bitmap = image, textLayer = layer))
+                    vm.addOverlay(Overlay(bitmap = image, textLayer = layer, pixelScale = pixelScale))
                 }
             },
         )
@@ -555,3 +560,6 @@ private fun emojiBitmap(emoji: String, sizePx: Int = 256): android.graphics.Bitm
 
 /** Rasio area editor (lebar/tinggi) = batas maksimal hasil ekspor. */
 private const val EditorAreaAspect = 9f / 16f
+
+/** Batas perbesaran bitmap teks (hemat memori pada video sangat besar di layar kecil). */
+private const val MaxTextPixelScale = 4f

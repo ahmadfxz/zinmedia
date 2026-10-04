@@ -31,7 +31,7 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "4.5.0"
+zinmedia = "4.6.0"
 
 [libraries]
 zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }
@@ -170,7 +170,7 @@ Intent(context, ImageEditorActivity::class.java).apply {
 
 ## Hasil & penyimpanan
 
-- Foto disimpan sebagai **JPEG (kualitas 90)**, video sebagai **MP4** dengan sisi panjang maksimal 1280 px dan orientasi mengikuti video asli.
+- Foto disimpan sebagai **JPEG (kualitas 90)** di resolusi asli foto (tidak bergantung ukuran layar), sisi terpanjang maksimal 2048 px; teks ikut dirender di resolusi foto agar tetap tajam. Video disimpan sebagai **MP4** dengan sisi panjang maksimal 1280 px dan orientasi mengikuti video asli; ukurannya dihitung dari resolusi asli video, dan teks/coretan dirender di resolusi hasil, jadi tidak bergantung ukuran layar.
 - **Lapisan di luar foto/video** (teks, stiker, emoji, coretan): bila semua lapisan ada di dalam frame, hasil seukuran foto/video asli. Bila ada lapisan yang keluar frame, hasil diperluas memenuhi seluruh area editor (batas maksimal) dengan latar hitam, sehingga sama dengan yang terlihat saat mengedit. Area editor adalah kotak **9:16** di tengah layar (di luar status bar & navigation bar), jadi hasil yang diperluas selalu 9:16 (video 720×1280). Lapisan yang keluar dari area editor terpotong, baik di layar maupun di hasil.
 - File hasil ada di cache aplikasi (`cache/zinmedia/…`) dan dibagikan lewat FileProvider milik library. File yang lebih tua dari 24 jam dihapus otomatis setiap kali editor dibuka, jadi segera salin atau unggah hasilnya.
 - Kunci extra hasil tersedia sebagai konstanta: `EXTRA_CAPTION`, `EXTRA_MEDIA_TYPE` (dan untuk editor gabungan `EXTRA_RESULT_URIS`, `EXTRA_RESULT_TYPES`).

@@ -96,12 +96,12 @@ internal fun StickerOverlays(
                 val bitmapW = overlay.bitmap.width.toFloat()
                 val bitmapH = overlay.bitmap.height.toFloat()
                 val displaySize = if (overlay.textLayer != null) {
-                    with(density) { DpSize(bitmapW.toDp(), bitmapH.toDp()) }
+                    with(density) { DpSize((bitmapW / overlay.pixelScale).toDp(), (bitmapH / overlay.pixelScale).toDp()) }
                 } else {
                     DpSize(StickerBaseSize, StickerBaseSize)
                 }
                 val baseWidthPx = if (overlay.textLayer != null) {
-                    bitmapW
+                    bitmapW / overlay.pixelScale
                 } else {
                     with(density) { StickerBaseSize.toPx() } * minOf(1f, bitmapW / bitmapH)
                 }

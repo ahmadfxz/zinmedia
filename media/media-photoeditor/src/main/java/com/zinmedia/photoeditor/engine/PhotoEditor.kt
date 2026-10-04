@@ -24,11 +24,17 @@ internal interface PhotoEditor {
      */
     fun addImage(desiredImage: Bitmap)
 
-    /** Tambah lapisan teks yang sudah dirender ([image]) beserta datanya ([layer]) untuk diedit ulang. */
-    fun addTextLayer(image: Bitmap, layer: Any)
+    /**
+     * Tambah lapisan teks yang sudah dirender ([image]) beserta datanya ([layer]) untuk diedit ulang.
+     * [pixelScale] = piksel [image] per piksel layar (ditampilkan seukuran layar, tajam saat ekspor).
+     */
+    fun addTextLayer(image: Bitmap, layer: Any, pixelScale: Float = 1f)
 
     /** Ganti gambar & data lapisan teks pada [view]. */
-    fun editTextLayer(view: View, image: Bitmap, layer: Any)
+    fun editTextLayer(view: View, image: Bitmap, layer: Any, pixelScale: Float = 1f)
+
+    /** Piksel foto per piksel layar (min. 1, maks. 4): resolusi render teks agar tajam saat ekspor. */
+    val photoPixelScale: Float
 
     /** Hapus lapisan [view] (teks/stiker/emoji). */
     fun removeLayer(view: View)

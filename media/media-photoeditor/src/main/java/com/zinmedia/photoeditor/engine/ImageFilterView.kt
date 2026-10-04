@@ -103,13 +103,42 @@ internal class ImageFilterView @JvmOverloads constructor(
             bitmapReadyContinuation = null
 
             val filterBitmap = try {
-                createBitmapFromGLSurface(this, gl)
+                // Hasil filter dibaca dari tekstur di resolusi asli foto (bukan seukuran layar).
+                if (mImageWidth > 0 && mImageHeight > 0) readResultTexture() else createBitmapFromGLSurface(this, gl)
             } catch (t: Throwable) {
                 continuation.resumeWithException(t)
                 null
             }
 
             if (filterBitmap != null) continuation.resume(filterBitmap)
+        }
+    }
+
+    /** Baca tekstur hasil (atau sumber bila tanpa efek) seukuran foto asli lewat framebuffer. */
+    private fun readResultTexture(): Bitmap {
+        val effectActive = mCurrentEffect != PhotoFilter.NONE || mCustomEffect != null
+        val texture = if (effectActive) mTextures[1] else mTextures[0]
+        val framebuffer = IntArray(1)
+        GLES20.glGenFramebuffers(1, framebuffer, 0)
+        try {
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffer[0])
+            GLES20.glFramebufferTexture2D(
+                GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0, GLES20.GL_TEXTURE_2D, texture, 0,
+            )
+            check(GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER) == GLES20.GL_FRAMEBUFFER_COMPLETE) {
+                "Framebuffer filter tidak lengkap"
+            }
+            val pixels = java.nio.ByteBuffer.allocateDirect(mImageWidth * mImageHeight * 4)
+                .order(java.nio.ByteOrder.nativeOrder())
+            GLES20.glReadPixels(0, 0, mImageWidth, mImageHeight, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixels)
+            pixels.rewind()
+            // Baris tekstur 0 = baris atas foto (diunggah dari Bitmap), jadi tidak perlu dibalik.
+            return Bitmap.createBitmap(mImageWidth, mImageHeight, Bitmap.Config.ARGB_8888).apply {
+                copyPixelsFromBuffer(pixels)
+            }
+        } finally {
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+            GLES20.glDeleteFramebuffers(1, framebuffer, 0)
         }
     }
 

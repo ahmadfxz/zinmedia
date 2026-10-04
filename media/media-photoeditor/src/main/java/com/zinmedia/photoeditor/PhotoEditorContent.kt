@@ -101,8 +101,10 @@ public fun PhotoEditorContent(
                     state.currentTool = EditorTool.Edit
                 },
                 onDone = { layer, layoutWidthPx ->
-                    // Gambar yang sama persis dengan tampilan di mode teks (mesin & gaya teks yang sama).
+                    // Gambar yang sama persis dengan tampilan di mode teks (mesin & gaya teks yang sama),
+                    // dirender di resolusi foto agar tetap tajam di hasil ekspor.
                     val typeface = state.fontManager.getFont(layer.fontIndex)
+                    val pixelScale = editor.photoPixelScale
                     val image = renderTextLayer(
                         layer = layer,
                         fontFamily = FontFamily(typeface),
@@ -110,9 +112,14 @@ public fun PhotoEditorContent(
                         measurer = textMeasurer,
                         density = density,
                         layoutWidthPx = layoutWidthPx,
+                        scale = pixelScale,
                     ).asAndroidBitmap()
                     val editing = state.editingTextView
-                    if (editing != null) editor.editTextLayer(editing, image, layer) else editor.addTextLayer(image, layer)
+                    if (editing != null) {
+                        editor.editTextLayer(editing, image, layer, pixelScale)
+                    } else {
+                        editor.addTextLayer(image, layer, pixelScale)
+                    }
                     state.currentTool = EditorTool.Text
                 },
             )

@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
  * Ukuran huruf untuk satu font: tinggi kapital & kedalaman ekor huruf (g, y, p) yang sebenarnya.
@@ -129,9 +130,12 @@ internal fun DrawScope.drawTextLayer(layer: TextLayer, layout: TextLayoutResult,
 
 /**
  * Render [layer] menjadi gambar transparan yang memuat teks + latarnya, persis seperti di mode
- * teks (mesin teks & gaya yang sama). Ukuran piksel sesuai layar, ditampilkan 1:1 di editor.
+ * teks (mesin teks & gaya yang sama).
  *
  * @param layoutWidthPx lebar kolom teks di mode teks, agar pemenggalan baris sama.
+ * @param scale perbesaran resolusi gambar (mis. agar tajam di hasil ekspor yang lebih besar dari
+ *   layar). Pemenggalan baris tetap diukur di ukuran layar, lalu digambar ulang dengan baris yang
+ *   sama persis; gambar ditampilkan `1/scale` kali ukuran pikselnya.
  */
 internal fun renderTextLayer(
     layer: TextLayer,
@@ -140,20 +144,44 @@ internal fun renderTextLayer(
     measurer: TextMeasurer,
     density: Density,
     layoutWidthPx: Int,
+    scale: Float = 1f,
 ): ImageBitmap {
-    val glyphs = glyphMetrics(typeface, with(density) { TextLayerMetrics.FontSize.toPx() })
-    val style = textLayerStyle(layer, fontFamily, glyphs, density)
+    val baseWidth = layoutWidthPx.coerceAtLeast(1)
+    var renderDensity = density
+    var text = layer.text
+    var textWidth = baseWidth
+    var softWrap = true
+    if (scale > 1f) {
+        // Baris dari ukuran layar (sama dengan mode teks), dijadikan baris tetap.
+        val baseGlyphs = glyphMetrics(typeface, with(density) { TextLayerMetrics.FontSize.toPx() })
+        val baseLayout = measurer.measure(
+            text = AnnotatedString(layer.text),
+            style = textLayerStyle(layer, fontFamily, baseGlyphs, density),
+            constraints = Constraints.fixedWidth(baseWidth),
+            density = density,
+            layoutDirection = LayoutDirection.Ltr,
+        )
+        text = (0 until baseLayout.lineCount).joinToString("\n") { i ->
+            layer.text.substring(baseLayout.getLineStart(i), baseLayout.getLineEnd(i, visibleEnd = true))
+        }
+        renderDensity = Density(density.density * scale, density.fontScale)
+        textWidth = (baseWidth * scale).roundToInt().coerceAtLeast(1)
+        softWrap = false
+    }
+    val glyphs = glyphMetrics(typeface, with(renderDensity) { TextLayerMetrics.FontSize.toPx() })
+    val style = textLayerStyle(layer, fontFamily, glyphs, renderDensity)
     val layout = measurer.measure(
-        text = AnnotatedString(layer.text),
+        text = AnnotatedString(text),
         style = style,
-        constraints = Constraints.fixedWidth(layoutWidthPx.coerceAtLeast(1)),
-        density = density,
+        softWrap = softWrap,
+        constraints = Constraints.fixedWidth(textWidth),
+        density = renderDensity,
         layoutDirection = LayoutDirection.Ltr,
     )
-    val background = textLayerBackground(layout, glyphs, density)
+    val background = textLayerBackground(layout, glyphs, renderDensity)
 
     // Batas gambar: kotak latar + area teks tiap baris (agar huruf dekoratif tidak terpotong).
-    val paddingH = with(density) { TextLayerMetrics.PaddingHorizontal.toPx() }
+    val paddingH = with(renderDensity) { TextLayerMetrics.PaddingHorizontal.toPx() }
     var bounds = background.getBounds()
     for (i in 0 until layout.lineCount) {
         val line = ComposeRect(
@@ -168,7 +196,7 @@ internal fun renderTextLayer(
     val height = ceil(bounds.bottom - top).toInt().coerceAtLeast(1)
 
     val image = ImageBitmap(width, height)
-    CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(image), Size(width.toFloat(), height.toFloat())) {
+    CanvasDrawScope().draw(renderDensity, LayoutDirection.Ltr, Canvas(image), Size(width.toFloat(), height.toFloat())) {
         translate(-left, -top) { drawTextLayer(layer, layout, background) }
     }
     return image
