@@ -55,6 +55,12 @@ internal class CameraSession(
     private var camera: Camera? = null
     private var videoCapture: VideoCapture<Recorder>? = null
     private var faceAnalyzer: ImageAnalysis.Analyzer? = null
+    /**
+     * Analisis frame dipasang sekali saat kamera diikat (hanya bila aplikasi punya efek wajah),
+     * agar memilih/menghapus efek tidak mengikat ulang kamera (layar berkedip hitam).
+     */
+    private val wantsAnalysis = CameraConfig.faceEffects.isNotEmpty()
+    private var imageAnalysis: ImageAnalysis? = null
     private val analysisExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     var lensFacing by mutableIntStateOf(CameraSelector.LENS_FACING_BACK)
@@ -97,7 +103,7 @@ internal class CameraSession(
             .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
             .build()
         // Analisis frame (efek wajah) hanya dipasang saat efek aktif: frame kecil, hanya yang terbaru.
-        val analysis = faceAnalyzer?.let { analyzer ->
+        val analysis = if (!wantsAnalysis) null else run {
             ImageAnalysis.Builder()
                 .setResolutionSelector(
                     ResolutionSelector.Builder()
@@ -110,7 +116,6 @@ internal class CameraSession(
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
-                .also { it.setAnalyzer(analysisExecutor, analyzer) }
         }
         fun group(withAnalysis: Boolean) = UseCaseGroup.Builder()
             .addUseCase(preview)
@@ -122,8 +127,11 @@ internal class CameraSession(
         provider.unbindAll()
         val selector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
         camera = try {
-            provider.bindToLifecycle(lifecycleOwner, selector, group(withAnalysis = true))
+            provider.bindToLifecycle(lifecycleOwner, selector, group(withAnalysis = true)).also {
+                imageAnalysis = analysis
+            }
         } catch (e: IllegalArgumentException) {
+            imageAnalysis = null
             // Sebagian HP tidak sanggup preview + rekam + analisis sekaligus: kamera tetap jalan tanpa efek wajah.
             Log.w(TAG, "Kombinasi kamera tidak didukung, tanpa analisis wajah", e)
             try {
@@ -135,6 +143,8 @@ internal class CameraSession(
             }
         }
         videoCapture = video
+        // Ikat ulang (mis. balik kamera): pasang lagi penganalisis efek yang aktif.
+        applyAnalyzer()
         camera?.cameraInfo?.let { info ->
             hasFlashUnit = info.hasFlashUnit()
             info.zoomState.value?.let {
@@ -158,9 +168,15 @@ internal class CameraSession(
 
     /** Pasang/lepas penganalisis frame untuk efek wajah (kamera diikat ulang). */
     fun setFaceAnalyzer(analyzer: ImageAnalysis.Analyzer?) {
-        if (faceAnalyzer === analyzer) return
         faceAnalyzer = analyzer
-        bind()
+        applyAnalyzer()
+    }
+
+    /** Pasang/lepas penganalisis tanpa mengikat ulang kamera; tanpa penganalisis frame dibuang. */
+    private fun applyAnalyzer() {
+        val analysis = imageAnalysis ?: return
+        val analyzer = faceAnalyzer
+        if (analyzer != null) analysis.setAnalyzer(analysisExecutor, analyzer) else analysis.clearAnalyzer()
     }
 
     fun setFaceOverlayImage(bitmap: android.graphics.Bitmap?) = processor.setOverlayImage(bitmap)
