@@ -5,7 +5,7 @@ Library Android (Jetpack Compose) untuk mengedit foto dan video sebelum diunggah
 | Modul | Isi |
 |---|---|
 | `media-live` | Kamera siaran langsung RTMP tanpa UI: `com.zinmedia.live.LiveCamera` (isi kamera + fungsi; tombol & layout dari aplikasi). Filter, penghalus, efek wajah ikut tersiar. Sudah termasuk `media-camera`. |
-| `media-effects` | Efek untuk siaran **RootEncoder milik aplikasi**: `com.zinmedia.effects.ZinEffects` (filter warna/LUT, penghalus kulit, efek wajah) sebagai filter GL stream. Kamera, siaran, dan UI tetap milik aplikasi. |
+| `media-effects` | Efek untuk siaran **RootEncoder milik aplikasi**: `com.zinmedia.effects.ZinEffects` (filter warna/LUT, penghalus kulit, efek wajah yang menempel di jaring wajah) sebagai filter GL stream. Kamera, siaran, dan UI tetap milik aplikasi. |
 | `media-camera` | Kamera foto & video ala aplikasi video pendek: filter & efek real-time, penghalus kulit, rekam bersegmen, kecepatan, timer, flash, zoom, galeri (pilih banyak): `com.zinmedia.camera.CameraActivity`. Hasilnya dibuka di editor gabungan. Sudah termasuk semua modul di bawah. |
 | `media-composer` | Editor beberapa foto & video sekaligus (maks. 5, geser antar media): `com.zinmedia.composer.MediaComposerActivity`. Sudah termasuk dua modul di bawah. |
 | `media-photoeditor` | Editor foto: `com.zinmedia.photoeditor.ImageEditorActivity` |
@@ -33,7 +33,7 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "4.8.1"
+zinmedia = "5.0.0"
 
 [libraries]
 zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }
@@ -268,48 +268,22 @@ Urutan hasil sama dengan urutan media. Media yang tidak diedit dikembalikan deng
 
 ### Efek wajah
 
-Efek yang menempel di wajah (kacamata, topi, kumis, hidung badut, dan lainnya) memakai **MediaPipe Face Landmarker**. Gambar efek disediakan aplikasi (PNG, sebaiknya latar transparan):
+Efek wajah memakai **MediaPipe Face Landmarker** dan mesin efek yang sama dengan siaran (`media-effects`): otomatis pas di wajah siapa pun tanpa pengaturan ukuran/posisi, ikut menoleh & berekspresi, tidak tertinggal saat kepala bergerak, dan ikut terekam di video & foto. Dua jenis efek, dari berkasnya:
 
 ```kotlin
 CameraConfig.faceEffects = listOf(
-    FaceEffect("Kacamata", "https://cdn.contoh.com/efek/kacamata.png", FaceAnchor.Eyes),
-    FaceEffect("Topi", "file:///android_asset/efek/topi.png", FaceAnchor.Head),
-    FaceEffect("Kumis", "…/kumis.png", FaceAnchor.Mouth, scale = 1.1f),
-    FaceEffect("Bunga", "…/bunga.png", FaceAnchor.Ear, side = FaceSide.Left),
-    FaceEffect("Badut", "…/hidung.png", FaceAnchor.Nose),
+    // Gambar di peta UV wajah (.png): topeng, riasan, cat wajah, kumis.
+    FaceEffect("Topeng", "file:///android_asset/efek/topeng.png"),
+    // Model 3D (.glb) di ruang kepala standar: kacamata, topi, helm, masker; ikon untuk daftar efek.
+    FaceEffect("Helm", "https://cdn.contoh.com/efek/helm.glb", iconUrl = "https://cdn.contoh.com/efek/helm.png"),
 )
 ```
 
-| `FaceAnchor` | Posisi & ukuran bawaan | Contoh |
-|---|---|---|
-| `Eyes` | Tengah kedua mata, selebar wajah | kacamata, topeng mata |
-| `Head` | Di atas dahi, sedikit lebih lebar dari wajah | topi, mahkota, telinga hewan |
-| `Forehead` | Tengah dahi | bindi, bintang |
-| `Nose` | Ujung hidung | hidung badut/hewan |
-| `Mouth` | Antara hidung dan bibir atas, selebar mulut | kumis |
-| `Chin` | Bibir bawah sampai dagu | janggut |
-| `Face` | Seluruh wajah | topeng wajah |
-| `Ear` | Telinga (pilih sisi dengan `side`) | bunga, anting |
-| `Cheek` | Pipi (pilih sisi dengan `side`) | rona, hati |
-| `Eye` | Masing-masing mata (pilih sisi dengan `side`) | hati di mata, monokel |
-
-Untuk `Ear`, `Cheek`, dan `Eye`, pilih sisi dengan `side = FaceSide.Left`, `FaceSide.Right`, atau `FaceSide.Both` (default):
-
-```kotlin
-FaceEffect("Bunga", "…/bunga.png", FaceAnchor.Ear, side = FaceSide.Left)   // telinga kiri saja
-FaceEffect("Rona", "…/rona.png", FaceAnchor.Cheek)                          // kedua pipi
-FaceEffect("Hati", "…/hati.png", FaceAnchor.Eye, side = FaceSide.Right)     // mata kanan saja
-```
-
-Kiri/kanan selalu sisi orangnya (bukan sisi layar), jadi tetap benar di kamera depan yang di-mirror. Saat kepala menoleh, efek di sisi yang membelakangi kamera disembunyikan. `Head` mengikuti arah kepala dalam 3D: saat menunduk bando/topi tampak di atas kepala, saat mendongak bergeser ke belakang dahi.
-
-`scale` memperbesar/memperkecil, `offsetY` menggeser ke atas (+) atau bawah (−) dalam satuan tinggi gambar. Efek ikut bergerak, membesar, dan miring mengikuti kepala, serta ikut terekam di video dan foto.
-
+- Membuat efek: lihat [Efek siaran RootEncoder](#efek-siaran-rootencoder-media-effects) (panduan UV & templat kepala di `tools/templat/`). Contoh siap pakai: `sample/src/main/assets/face_mesh/` dan `face_3d/` (lisensi di `CREDITS.txt`).
 - Kosong (default) = tombol **Efek** disembunyikan.
 - `CameraConfig.maxFaces` (1..3, default 1): jumlah wajah yang diberi efek sekaligus.
-- Gambar efek: PNG latar transparan, dipotong rapat ke bentuknya (tanpa ruang kosong), sekitar 512–1024 px.
-- Model (sekitar 3,6 MB) diunduh saat efek pertama kali dipakai lalu disimpan; URL-nya bisa diganti lewat `CameraConfig.faceModelUrl`. Aplikasi perlu izin `INTERNET`.
-- Ringan untuk HP murah: frame analisis kecil, frame lama dibuang, GPU dengan cadangan CPU, dan kamera tetap berjalan (tanpa efek) bila HP tidak sanggup.
+- Model deteksi (sekitar 3,6 MB) diunduh saat efek pertama kali dipakai lalu disimpan; URL-nya bisa diganti lewat `CameraConfig.faceModelUrl`. Aplikasi perlu izin `INTERNET`.
+- Dengan efek aktif, video ditahan ±0,1–0,2 detik agar efek menempel; cap waktu ikut ditahan sehingga rekaman tetap sinkron dengan audio.
 
 Hasil foto/video langsung dibuka di `MediaComposerActivity`. Kembali dari editor = kembali ke kamera (klip tetap ada). Setelah dikirim, `CameraActivity` selesai dengan hasil yang **sama persis** dengan editor gabungan (`EXTRA_RESULT_URIS`, `EXTRA_RESULT_TYPES`, `EXTRA_CAPTION`, `clipData`, `data`).
 
@@ -342,7 +316,7 @@ fun LiveScreen() {
 
 // Gift dari penonton -> efek wajah yang ikut tersiar (satu efek per waktu).
 scope.launch {
-    live.setFaceEffect(FaceEffect("Kacamata", gift.imageUrl, FaceAnchor.Eyes))
+    live.setFaceEffect(FaceEffect("Kacamata", gift.modelUrl))   // .png (peta UV) atau .glb (3D)
     delay(10_000)
     live.setFaceEffect(null)
 }
@@ -380,7 +354,7 @@ effects.mirrored = camera.getCameraFacing() == CameraHelper.Facing.FRONT
 
 scope.launch { effects.setFilter(2) }        // indeks dari effects.filterNames (0 = Normal)
 effects.setSmoothing(0.6f)                     // penghalus kulit 0..1
-scope.launch { effects.setFaceEffect(FaceEffect("Kacamata", url, FaceAnchor.Eyes)) }  // null = lepas
+scope.launch { effects.setFaceEffect(FaceEffect("Topeng", "file:///android_asset/face_mesh/topeng.png")) }  // null = lepas
 
 effects.release()                              // saat layar/stream selesai
 ```
@@ -392,10 +366,14 @@ effects.release()                              // saat layar/stream selesai
 | `filterNames`, `filterSwatches`, `setFilter(index)` | Daftar filter (nama + warna contoh) & pilihannya; bisa diganti kapan saja, termasuk saat live |
 | `filterPreview(index, bitmap)` | Salinan `bitmap` dengan filter itu, untuk thumbnail daftar filter (mis. dari satu foto contoh) |
 | `setSmoothing(0..1)` | Penghalus kulit |
-| `prepareFaceEffects()`, `setFaceEffect(effect?)`, `faceModelProgress` | Efek wajah (satu per waktu). Model MediaPipe diunduh sekali lalu disimpan |
-| `mirrored` | `true` bila frame stream adalah gambar cermin, agar efek kiri/kanan (telinga, pipi, mata) tetap di sisi orangnya |
+| `prepareFaceEffects()`, `setFaceEffect(effect?)`, `faceModelProgress` | Efek wajah `FaceEffect(nama, gambar)` (satu per waktu). Model MediaPipe diunduh sekali lalu disimpan |
+| `mirrored` | `true` bila frame stream adalah gambar cermin, agar sisi kiri/kanan efek tetap di sisi orangnya |
 | `release()` | Lepas model & efek |
 
+- **Efek wajah**: `FaceEffect(nama, berkas, iconUrl?)`. Berkas `.png` = gambar di peta UV wajah standar MediaPipe, dibungkuskan ke 468 titik wajah (topeng, riasan, cat wajah, kumis). Berkas `.glb` = model 3D di ruang kepala standar MediaPipe (cm), dipasang dengan pose kepala dari jaring wajah (kacamata, topi, helm, masker); bagian di balik wajah/kepala tertutup, tekstur warna didukung. Keduanya otomatis pas di wajah siapa pun tanpa pengaturan. Contoh: `sample/src/main/assets/face_mesh/` (cat wajah resmi MediaPipe + `tools/make_face_effects.py`) dan `face_3d/` (`tools/fit_face_props.py`); lisensi di `CREDITS.txt`.
+- **Membuat efek gambar (UV)**: lukis di atas `tools/templat/panduan_uv.png` (1024×1024: jaring wajah + garis mata, alis, hidung, bibir, oval wajah) di lapisan baru, sembunyikan panduannya, lalu ekspor PNG transparan 1024×1024. Atau lukis langsung di wajah 3D dengan Texture Paint Blender pada `kepala_standar.glb`. Area di luar oval wajah tidak tampil. Panduan dibuat ulang dengan `tools/export_uv_guide.py`.
+- **Efek 3D tanpa konfigurasi (Blender dkk.)**: import `tools/templat/kepala_standar.glb` (File > Import > glTF 2.0), modelkan aset di kepala standar itu (1 unit = 1 cm; +Y atas, +Z depan), **hapus kedua objek `TEMPLAT_…`**, lalu ekspor `.glb`. Hasilnya langsung dipakai: `FaceEffect("Nama", "…/nama.glb")`. Wajah templat memakai tekstur kisi UV resmi MediaPipe, sekaligus panduan peta UV untuk efek gambar. Aset dari luar (ukuran/arah sembarang) ditempatkan sekali dengan `tools/fit_face_props.py`; templat dibuat ulang dengan `tools/export_head_template.py`.
+- **Sinkron frame**: dengan efek wajah aktif, video ditahan beberapa frame (±0,1–0,2 detik) sampai posisi wajah frame itu siap, sehingga efek menempel dan tidak tertinggal saat kepala bergerak (seperti TikTok). Audio tidak ikut ditahan.
 - RootEncoder **tidak** dibawa modul ini: aplikasi menyertakan `com.github.pedroSG94.RootEncoder:library` sendiri (diuji dengan 2.8.1).
 - Aturan R8 untuk MediaPipe sudah disertakan (aman untuk build release yang di-minify).
 - Contoh lengkap: `sample/…/EffectsDemoActivity.kt`.

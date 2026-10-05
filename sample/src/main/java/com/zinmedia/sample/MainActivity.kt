@@ -12,9 +12,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import com.zinmedia.camera.CameraActivity
 import com.zinmedia.camera.CameraConfig
-import com.zinmedia.camera.FaceAnchor
 import com.zinmedia.camera.FaceEffect
-import com.zinmedia.camera.FaceSide
 import com.zinmedia.composer.AllowedMedia
 import com.zinmedia.composer.MediaComposer
 import com.zinmedia.composer.MediaComposerActivity
@@ -83,21 +81,15 @@ class MainActivity : ComponentActivity() {
             // Warna utama milik aplikasi (tombol kirim, dialog, dll).
             accentColor = 0xFF1E88E5.toInt(),
         )
-        // Efek wajah kamera (gambar PNG milik aplikasi).
-        CameraConfig.faceEffects = listOf(
-            FaceEffect("Kacamata", "file:///android_asset/face/glasses.png", FaceAnchor.Eyes),
-            FaceEffect("Topi", "file:///android_asset/face/hat.png", FaceAnchor.Head),
-            FaceEffect("Kumis", "file:///android_asset/face/mustache.png", FaceAnchor.Mouth),
-            FaceEffect("Badut", "file:///android_asset/face/nose.png", FaceAnchor.Nose),
-            FaceEffect("Kucing", "file:///android_asset/face/catears.png", FaceAnchor.Head, offsetY = 0.2f),
-            FaceEffect("Bunga", "file:///android_asset/face/flower.png", FaceAnchor.Ear, side = FaceSide.Left),
-            FaceEffect("Pipi", "file:///android_asset/face/heart.png", FaceAnchor.Cheek, side = FaceSide.Both),
-            FaceEffect("Mata", "file:///android_asset/face/heart.png", FaceAnchor.Eye, side = FaceSide.Right),
-            FaceEffect("Bintang", "file:///android_asset/face/star.png", FaceAnchor.Forehead),
-            FaceEffect("Janggut", "file:///android_asset/face/beard.png", FaceAnchor.Chin),
-            FaceEffect("Topeng", "file:///android_asset/face/eyemask.png", FaceAnchor.Eyes),
-            FaceEffect("Wajah", "file:///android_asset/face/facemask.png", FaceAnchor.Face),
-        )
+        // Efek wajah kamera: gambar peta UV (.png) dan model 3D (.glb, dengan ikon), otomatis pas di
+        // wajah siapa pun. Aset contoh: assets/face_mesh & assets/face_3d (lihat CREDITS.txt).
+        val paint = listOf("Cat Wajah", "Topeng", "Kucing", "Kumis", "Pipi Merah", "Badut", "Tengkorak", "Bintang")
+        val models = listOf("Kacamata Sport", "Kacamata Hitam", "Helm Pilot", "Helm Scifi", "Topi Nelayan", "Masker Gas")
+        fun file(name: String) = name.lowercase().replace(' ', '_')
+        CameraConfig.faceEffects = paint.map { FaceEffect(it, "file:///android_asset/face_mesh/${file(it)}.png") } +
+            models.map {
+                FaceEffect(it, "file:///android_asset/face_3d/${file(it)}.glb", iconUrl = "file:///android_asset/face_3d/${file(it)}_ikon.png")
+            }
 
         resultView = ResultView(this)
         val content = LinearLayout(this).apply {

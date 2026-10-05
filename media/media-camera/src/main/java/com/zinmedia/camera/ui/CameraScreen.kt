@@ -956,6 +956,7 @@ private fun FaceEffectStrip(state: CameraState) {
             FaceEffectItem(
                 label = stringResource(R.string.zm_camera_face_none),
                 imageUrl = null,
+                none = true,
                 selected = state.faceEffectIndex < 0,
                 onClick = { state.selectFaceEffect(-1) },
             )
@@ -963,7 +964,8 @@ private fun FaceEffectStrip(state: CameraState) {
         itemsIndexed(state.faceEffects) { index, effect ->
             FaceEffectItem(
                 label = effect.name,
-                imageUrl = effect.imageUrl,
+                // Ikon dari aplikasi; tanpa ikon, efek gambar memakai gambarnya sendiri.
+                imageUrl = effect.iconUrl ?: effect.imageUrl.takeUnless { effect.isModel },
                 selected = index == state.faceEffectIndex,
                 onClick = { state.selectFaceEffect(index) },
             )
@@ -972,7 +974,7 @@ private fun FaceEffectStrip(state: CameraState) {
 }
 
 @Composable
-private fun FaceEffectItem(label: String, imageUrl: String?, selected: Boolean, onClick: () -> Unit) {
+private fun FaceEffectItem(label: String, imageUrl: String?, selected: Boolean, onClick: () -> Unit, none: Boolean = false) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -998,7 +1000,9 @@ private fun FaceEffectItem(label: String, imageUrl: String?, selected: Boolean, 
                     modifier = Modifier.size(44.dp),
                 )
             } else {
-                Icon(painterResource(R.drawable.zm_ic_camera_close), null, tint = Color.White, modifier = Modifier.size(24.dp))
+                // "Tanpa" = silang; efek tanpa ikon = ikon wajah.
+                val icon = if (none) R.drawable.zm_ic_camera_close else R.drawable.zm_ic_camera_face
+                Icon(painterResource(icon), null, tint = Color.White, modifier = Modifier.size(24.dp))
             }
         }
         Spacer(Modifier.height(4.dp))

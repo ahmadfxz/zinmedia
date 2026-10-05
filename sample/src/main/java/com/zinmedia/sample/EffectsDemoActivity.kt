@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -20,11 +21,9 @@ import com.pedro.encoder.input.sources.video.Camera2Source
 import com.pedro.encoder.input.video.CameraHelper
 import com.pedro.encoder.utils.gl.AspectRatioMode
 import com.pedro.library.rtmp.RtmpStream
-import com.zinmedia.effects.FaceAnchor
 import com.zinmedia.effects.FaceEffect
 import com.zinmedia.effects.ZinEffects
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -106,20 +105,21 @@ class EffectsDemoActivity : ComponentActivity(), ConnectChecker {
                 effects.setSmoothing(if (smoothing) 0.6f else 0f)
             })
         }
-        val row2 = LinearLayout(this).apply {
-            fun gift(label: String, effect: FaceEffect) = button(label) {
-                giftJob?.cancel()
-                giftJob = lifecycleScope.launch {
-                    try {
-                        effects.setFaceEffect(effect)
-                        delay(10_000)
-                    } finally {
-                        effects.setFaceEffect(null)
-                    }
+        // Efek wajah: gambar peta UV dibungkuskan ke wajah, otomatis pas di wajah siapa pun.
+        // Model 3D (.glb) di ruang kepala standar: kacamata, topi, mahkota, telinga.
+        fun asset(folder: String, name: String, ext: String) =
+            FaceEffect(name, "file:///android_asset/$folder/${name.lowercase().replace(' ', '_')}.$ext")
+        val faceEffects = listOf("Cat Wajah", "Topeng", "Kucing", "Kumis", "Pipi Merah", "Badut", "Tengkorak", "Bintang").map { asset("face_mesh", it, "png") } +
+            listOf("Kacamata Sport", "Kacamata Hitam", "Helm Pilot", "Helm Scifi", "Topi Nelayan", "Masker Gas").map { asset("face_3d", it, "glb") }
+        val row2 = HorizontalScrollView(this).apply {
+            addView(LinearLayout(this@EffectsDemoActivity).apply {
+                fun choose(effect: FaceEffect?) {
+                    giftJob?.cancel()
+                    giftJob = lifecycleScope.launch { effects.setFaceEffect(effect) }
                 }
-            }
-            addView(gift("Kacamata", FaceEffect("Kacamata", "file:///android_asset/face/glasses.png", FaceAnchor.Eyes)))
-            addView(gift("Bunga kiri", FaceEffect("Bunga", "file:///android_asset/face/flower.png", FaceAnchor.Ear, side = com.zinmedia.effects.FaceSide.Left)))
+                addView(button("Tanpa") { choose(null) })
+                faceEffects.forEach { effect -> addView(button(effect.name) { choose(effect) }) }
+            })
         }
         val live = button("Mulai Live") { b ->
             if (stream.isStreaming) {

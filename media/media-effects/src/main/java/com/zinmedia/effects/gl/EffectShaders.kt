@@ -79,25 +79,4 @@ public object EffectShaders {
             gl_FragColor = vec4(c, 1.0);
         }
     """
-
-    /** Vertex gambar efek wajah: posisi NDC & koordinat tekstur apa adanya. */
-    public const val OVERLAY_VERTEX: String = """
-        attribute vec4 aPosition;
-        attribute vec2 aTexCoord;
-        varying vec2 vTexCoord;
-        void main() {
-            gl_Position = aPosition;
-            vTexCoord = aTexCoord;
-        }
-    """
-
-    /** Fragment gambar efek wajah (alfa premultiplied, dari Bitmap). */
-    public const val OVERLAY_FRAGMENT: String = """
-        precision mediump float;
-        uniform sampler2D sOverlay;
-        varying vec2 vTexCoord;
-        void main() {
-            gl_FragColor = texture2D(sOverlay, vTexCoord);
-        }
-    """
 }

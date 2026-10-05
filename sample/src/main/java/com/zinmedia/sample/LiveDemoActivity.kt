@@ -39,7 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.zinmedia.camera.FaceAnchor
 import com.zinmedia.camera.FaceEffect
 import com.zinmedia.live.LiveCamera
 import com.zinmedia.live.LivePhase
@@ -120,11 +119,11 @@ class LiveDemoActivity : ComponentActivity() {
                         scope.launch { live.setFilter(filter) }
                     }) { Text(live.filterNames[filter], color = Color.White) }
                 }
-                // Simulasi gift dari penonton: pasang kacamata 10 detik.
+                // Simulasi gift dari penonton: pasang kacamata 3D 10 detik.
                 OutlinedButton(onClick = {
                     giftJob?.cancel()
                     giftJob = scope.launch {
-                        live.setFaceEffect(FaceEffect("Kacamata", "file:///android_asset/face/glasses.png", FaceAnchor.Eyes))
+                        live.setFaceEffect(FaceEffect("Kacamata", "file:///android_asset/face_3d/kacamata_hitam.glb"))
                         delay(10_000)
                         live.setFaceEffect(null)
                     }

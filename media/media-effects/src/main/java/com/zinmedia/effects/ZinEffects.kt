@@ -2,16 +2,12 @@ package com.zinmedia.effects
 
 import android.content.Context
 import android.graphics.Bitmap
-import coil3.SingletonImageLoader
-import coil3.request.ImageRequest
-import coil3.request.SuccessResult
-import coil3.request.allowHardware
-import coil3.toBitmap
 import com.pedro.encoder.input.gl.render.filters.BaseFilterRender
 import com.zinmedia.effects.face.FaceDetector
 import com.zinmedia.effects.face.ensureFaceModel
 import com.zinmedia.effects.gl.ColorParams
 import com.zinmedia.effects.gl.EffectsFilterRender
+import com.zinmedia.effects.gl.FaceEffectLoader
 import com.zinmedia.effects.gl.loadCubeLut
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,7 +26,7 @@ import kotlinx.coroutines.withContext
  * val effects = ZinEffects(context)
  * stream.getGlInterface().addFilter(effects.filterRender)
  * effects.setSmoothing(0.6f)
- * scope.launch { effects.setFaceEffect(FaceEffect("Kacamata", url, FaceAnchor.Eyes)) }
+ * scope.launch { effects.setFaceEffect(FaceEffect("Topeng", "file:///android_asset/face/topeng.png")) }
  * // selesai:
  * effects.release()
  * ```
@@ -130,25 +126,26 @@ public class ZinEffects(
      * tidak bisa dimuat) = exception. Panggilan baru sebaiknya membatalkan panggilan sebelumnya.
      */
     public suspend fun setFaceEffect(effect: FaceEffect?) {
+        val engine = render.engine
         if (effect == null) {
-            detector?.effect = null
-            render.detector = null
-            render.setOverlayImage(null)
+            detector?.enabled = false
+            engine.detector = null
+            engine.effect = null
             return
         }
         val active = prepare()
-        val image = loadImage(effect.imageUrl) ?: error("Gambar efek tidak bisa dimuat: ${effect.imageUrl}")
+        val ready = FaceEffectLoader.load(context, effect)
         check(!released) { "ZinEffects sudah dilepas" }
-        active.effect = effect to image.height.toFloat() / image.width.coerceAtLeast(1)
-        render.setOverlayImage(image)
-        render.detector = active
+        engine.effect = ready
+        active.enabled = true
+        engine.detector = active
     }
 
     /** Lepas efek wajah & model. [filterRender] tetap bisa dilepas dari stream oleh aplikasi. */
     public fun release() {
         released = true
-        render.detector = null
-        render.setOverlayImage(null)
+        render.engine.detector = null
+        render.engine.effect = null
         detector?.close()
         detector = null
     }
@@ -160,38 +157,10 @@ public class ZinEffects(
             _faceModelProgress.value = 0f
             val model = ensureFaceModel(context, faceModelUrl) { _faceModelProgress.value = it }
             withContext(Dispatchers.Default) {
-                FaceDetector(context, model, maxFaces, ::onCorners)
+                FaceDetector(context, model, maxFaces, render.engine::onFaces)
             }.also { detector = it }
         } finally {
             _faceModelProgress.value = null
         }
-    }
-
-    /**
-     * Sudut efek (piksel frame deteksi) -> pecahan frame untuk digambar filter. Frame deteksi yang
-     * dibalik (gambar cermin) dikembalikan, sehingga gambar efek ikut ter-mirror seperti wajahnya.
-     */
-    private fun onCorners(corners: List<FloatArray>, tag: Any?) {
-        if (render.detector == null) return
-        val (width, height, flipped) = tag as FloatArray
-        render.quads = corners.map { points ->
-            FloatArray(points.size) { i ->
-                if (i % 2 == 1) {
-                    points[i] / height
-                } else {
-                    val x = points[i] / width
-                    if (flipped > 0f) 1f - x else x
-                }
-            }
-        }
-    }
-
-    private suspend fun loadImage(url: String): Bitmap? {
-        val request = ImageRequest.Builder(context)
-            .data(url)
-            .allowHardware(false)
-            .build()
-        val result = SingletonImageLoader.get(context).execute(request)
-        return (result as? SuccessResult)?.image?.toBitmap()
     }
 }

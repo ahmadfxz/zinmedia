@@ -1,0 +1,7 @@
+Data pihak ketiga di folder ini:
+
+- canonical_face_model.obj (jaring & peta UV wajah standar) dan tekstur kisi UV di
+  templat/kepala_standar.glb: MediaPipe, Apache License 2.0,
+  https://github.com/google-ai-edge/mediapipe/tree/master/mediapipe/modules/face_geometry/data
+
+Aset contoh di sample/src/main/assets/face_mesh dan face_3d: lihat CREDITS.txt di tiap folder.

@@ -6,13 +6,17 @@ package com.zinmedia.camera
  *
  * ```kotlin
  * CameraConfig.faceEffects = listOf(
- *     FaceEffect("Kacamata", "https://cdn.contoh.com/efek/kacamata.png", FaceAnchor.Eyes),
+ *     FaceEffect("Topeng", "file:///android_asset/efek/topeng.png", iconUrl = "…/ikon_topeng.png"),
+ *     FaceEffect("Helm", "https://cdn.contoh.com/efek/helm.glb", iconUrl = "…/ikon_helm.png"),
  * )
  * ```
  */
 public object CameraConfig {
 
-    /** Efek wajah (gambar yang menempel di wajah). Kosong = tombol Efek disembunyikan. */
+    /**
+     * Efek wajah: gambar peta UV (.png) atau model 3D (.glb), otomatis pas di wajah siapa pun.
+     * Kosong = tombol Efek disembunyikan.
+     */
     @Volatile
     public var faceEffects: List<FaceEffect> = emptyList()
 
@@ -34,13 +38,5 @@ public object CameraConfig {
     public const val DEFAULT_FACE_MODEL_URL: String = com.zinmedia.effects.DEFAULT_FACE_MODEL_URL
 }
 
-// Tipe efek wajah berada di media-effects (dipakai bersama kamera & efek siaran).
-
-/** @see com.zinmedia.effects.FaceEffect */
+/** Efek wajah (gambar peta UV atau model 3D .glb); lihat [com.zinmedia.effects.FaceEffect]. */
 public typealias FaceEffect = com.zinmedia.effects.FaceEffect
-
-/** @see com.zinmedia.effects.FaceSide */
-public typealias FaceSide = com.zinmedia.effects.FaceSide
-
-/** @see com.zinmedia.effects.FaceAnchor */
-public typealias FaceAnchor = com.zinmedia.effects.FaceAnchor

@@ -11,7 +11,6 @@ import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
-import com.zinmedia.effects.FaceEffect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -60,49 +59,38 @@ public suspend fun ensureFaceModel(context: Context, url: String, onProgress: (F
     }
 
 /**
- * Pendeteksi wajah MediaPipe untuk efek wajah. Frame tegak (tidak di-mirror) dikirim lewat [submit];
- * deteksi berjalan asinkron (frame baru ditolak selama deteksi sebelumnya berjalan), lalu posisi
- * efek dihaluskan dan dikirim ke [onCorners]: sudut-sudut tiap efek (kiri-atas, kanan-atas,
- * kiri-bawah, kanan-bawah) dalam piksel frame itu, beserta `tag` frame tersebut. Daftar kosong =
- * tidak ada wajah.
+ * Pendeteksi wajah MediaPipe. Frame tegak (tidak di-mirror) dikirim lewat [submit]; deteksi berjalan
+ * asinkron (frame baru ditolak selama deteksi sebelumnya berjalan), lalu titik wajah mentah per
+ * wajah dikirim ke [onFaces] beserta `tag` frame tersebut. Daftar kosong = tidak ada wajah.
+ *
+ * Titik wajah: [POINTS] titik × (x, y, z) berurutan; x, y pecahan lebar/tinggi frame, z (kedalaman,
+ * + menjauh dari kamera) dibagi lebar frame, seperti keluaran MediaPipe.
  */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 public class FaceDetector(
     context: Context,
     modelFile: File,
     private val maxFaces: Int = 1,
-    private val onCorners: (corners: List<FloatArray>, tag: Any?) -> Unit,
+    private val onFaces: (faces: List<FloatArray>, tag: Any?) -> Unit,
 ) {
 
-    /** Efek aktif dan rasio gambarnya (tinggi/lebar). Ganti efek = penghalus diulang dari awal. */
+    /** `false` = tidak mendeteksi; mematikan/menyalakan membuang hasil yang sedang dihitung. */
     @Volatile
-    public var effect: Pair<FaceEffect, Float>? = null
+    public var enabled: Boolean = false
         set(value) {
             field = value
-            resetFilters = true
             generation++
         }
 
-    /** Bertambah tiap efek diganti; hasil yang dihitung untuk efek sebelumnya dibuang. */
+    /** Bertambah tiap [enabled] diubah; hasil yang dihitung sebelumnya dibuang. */
     @Volatile
     private var generation = 0
-
-    @Volatile
-    private var resetFilters = false
 
     private val busy = AtomicBoolean(false)
     private var lastTimestamp = 0L
     private var lastSubmitMs = 0L
-    private var frameWidth = 1f
-    private var frameHeight = 1f
     private var frameTag: Any? = null
-    /** Penghalus per wajah per posisi (efek di kedua sisi = 2 posisi). */
-    // Posisi/ukuran dalam pecahan frame; sudut (radian) memakai beta lebih kecil.
-    private val filters = List(maxFaces * MAX_SLOTS) {
-        List(4) { OneEuroFilter() } + OneEuroFilter(minCutoff = 1.7f, beta = 1.5f)
-    }
-    /** Slot yang tampil di hasil sebelumnya; slot yang baru muncul dimulai tanpa meluncur. */
-    private val visibleSlots = BooleanArray(maxFaces * MAX_SLOTS)
+    private var frameGeneration = 0
     private val landmarker: FaceLandmarker = createLandmarker(context, modelFile)
 
     private fun createLandmarker(context: Context, modelFile: File): FaceLandmarker {
@@ -135,23 +123,22 @@ public class FaceDetector(
     }
 
     /**
-     * `true` bila frame berikutnya akan dideteksi: ada efek, deteksi sebelumnya selesai, dan sudah
+     * `true` bila frame berikutnya akan dideteksi: menyala, deteksi sebelumnya selesai, dan sudah
      * lewat jeda minimum (~30 deteksi/detik, hemat baterai & panas). Cek ini sebelum menyiapkan
      * bitmap agar frame yang akan dilewati tidak perlu dibaca.
      */
     public fun wantsFrame(): Boolean =
-        effect != null && !busy.get() && SystemClock.uptimeMillis() - lastSubmitMs >= MIN_INTERVAL_MS
+        enabled && !busy.get() && SystemClock.uptimeMillis() - lastSubmitMs >= MIN_INTERVAL_MS
 
     /**
      * Deteksi [bitmap] (frame tegak). [bitmap] tidak boleh diubah sampai hasilnya keluar (lihat
      * [wantsFrame]). Mengembalikan `false` bila frame dilewati.
      */
     public fun submit(bitmap: Bitmap, tag: Any? = null): Boolean {
-        if (effect == null || !busy.compareAndSet(false, true)) return false
+        if (!enabled || !busy.compareAndSet(false, true)) return false
         lastSubmitMs = SystemClock.uptimeMillis()
-        frameWidth = bitmap.width.toFloat()
-        frameHeight = bitmap.height.toFloat()
         frameTag = tag
+        frameGeneration = generation
         // Timestamp harus naik terus untuk mode LIVE_STREAM.
         val timestamp = maxOf(SystemClock.uptimeMillis(), lastTimestamp + 1)
         lastTimestamp = timestamp
@@ -166,65 +153,34 @@ public class FaceDetector(
     }
 
     private fun onResult(result: FaceLandmarkerResult) {
-        val startGeneration = generation
-        val current = effect
-        val width = frameWidth
-        val height = frameHeight
         val tag = frameTag
+        val startGeneration = frameGeneration
         // Frame berikutnya boleh dikirim setelah nilai frame ini dibaca.
         busy.set(false)
-        if (current == null) return
-        val now = System.nanoTime()
-        val faces = result.faceLandmarks().take(maxFaces)
-        if (faces.isEmpty() || resetFilters) {
-            resetFilters = false
-            filters.forEach { group -> group.forEach { it.reset() } }
-        }
-        val shownNow = BooleanArray(visibleSlots.size)
-        val corners = faces.flatMapIndexed { faceIndex, landmarks ->
-            if (landmarks.size < Landmark.COUNT) return@flatMapIndexed emptyList()
-            val xs = FloatArray(landmarks.size)
-            val ys = FloatArray(landmarks.size)
-            val zs = FloatArray(landmarks.size)
-            landmarks.forEachIndexed { i, point ->
-                xs[i] = point.x() * width
-                ys[i] = point.y() * height
-                // Kedalaman MediaPipe berskala sama dengan x (lebar frame).
-                zs[i] = point.z() * width
-            }
-            placeFaceEffects(FacePoints(xs, ys, zs), current.first, current.second, width, height)
-                .filter { it.slot in 0 until MAX_SLOTS }
-                .map { raw ->
-                    val index = faceIndex * MAX_SLOTS + raw.slot
-                    val f = filters[index]
-                    // Muncul lagi (mis. telinga kembali terlihat): langsung di tempatnya.
-                    if (!visibleSlots[index]) f.forEach { it.reset() }
-                    shownNow[index] = true
-                    val smooth = FacePlacement(
-                        centerX = f[0].filter(raw.centerX, now),
-                        centerY = f[1].filter(raw.centerY, now),
-                        width = f[2].filter(raw.width, now),
-                        height = f[3].filter(raw.height, now),
-                        angle = f[4].filter(raw.angle, now),
-                    )
-                    placementCorners(smooth, width, height)
+        if (!enabled || startGeneration != generation) return
+        val faces = result.faceLandmarks().take(maxFaces).filter { it.size >= POINTS }.map { landmarks ->
+            FloatArray(POINTS * 3) { i ->
+                val point = landmarks[i / 3]
+                when (i % 3) {
+                    0 -> point.x()
+                    1 -> point.y()
+                    else -> point.z()
                 }
+            }
         }
-        shownNow.copyInto(visibleSlots)
-        // Efek diganti selama perhitungan: posisi ini milik efek lama.
-        if (startGeneration != generation) return
-        onCorners(corners, tag)
+        onFaces(faces, tag)
     }
 
     public fun close() {
-        effect = null
+        enabled = false
         landmarker.close()
     }
 
-    private companion object {
-        const val TAG = "FaceDetector"
-        /** Posisi efek maksimal per wajah (kedua telinga/pipi). */
-        const val MAX_SLOTS = 2
-        const val MIN_INTERVAL_MS = 33L
+    public companion object {
+        /** Titik wajah MediaPipe Face Mesh, termasuk iris. */
+        public const val POINTS: Int = 478
+
+        private const val TAG = "FaceDetector"
+        private const val MIN_INTERVAL_MS = 33L
     }
 }

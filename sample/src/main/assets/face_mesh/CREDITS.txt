@@ -1,0 +1,2 @@
+cat_wajah.png: Apache-2.0, The MediaPipe Authors, https://github.com/google-ai-edge/mediapipe/tree/master/mediapipe/graphs/face_effect/data (facepaint.pngblob)
+Efek lain di folder ini: dibuat dengan tools/make_face_effects.py (milik zinmedia).

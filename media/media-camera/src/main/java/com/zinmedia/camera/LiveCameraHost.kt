@@ -37,8 +37,6 @@ public class LiveCameraHost(context: Context, lifecycleOwner: LifecycleOwner) {
         lifecycleOwner = lifecycleOwner,
         previewView = previewView,
         withVideoCapture = false,
-        // Efek bisa dipasang kapan saja (mis. dari gift): analisis frame selalu siap.
-        wantsAnalysis = true,
     )
     private val faceRunner = FaceEffectRunner(context, session)
     private val filters = cameraFilters()

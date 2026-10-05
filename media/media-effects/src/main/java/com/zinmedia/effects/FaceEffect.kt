@@ -5,64 +5,24 @@ public const val DEFAULT_FACE_MODEL_URL: String =
     "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
 
 /**
- * Satu efek wajah: gambar PNG (sebaiknya latar transparan) yang ditempel di [anchor] dan ikut
- * bergerak, membesar, dan miring mengikuti wajah.
+ * Satu efek wajah, otomatis pas di kepala siapa pun (tanpa pengaturan ukuran/posisi), ikut menoleh,
+ * dan bagian yang tertutup wajah/kepala saat menoleh ikut tertutup. Dua jenis, dari [imageUrl]:
  *
- * @param imageUrl URL atau URI apa pun yang bisa dimuat Coil (termasuk `file:///android_asset/…`).
- * @param scale pengali ukuran terhadap ukuran bawaan titik tempel (1 = bawaan).
- * @param offsetY geser ke atas (+) / bawah (−) dalam satuan tinggi gambar.
- * @param side untuk [FaceAnchor.Ear], [FaceAnchor.Cheek], dan [FaceAnchor.Eye]: kiri, kanan, atau
- *   keduanya (sisi **orangnya**). Diabaikan untuk titik tempel lain.
+ * - **Gambar** (`.png`, latar transparan) di peta UV wajah standar MediaPipe
+ *   (`canonical_face_model.obj`): dibungkuskan ke permukaan wajah, seperti topeng, riasan, cat
+ *   wajah, kumis; ikut berekspresi. Contoh: `tools/make_face_effects.py`.
+ * - **Model 3D** (`.glb`, low-poly) di ruang kepala standar MediaPipe (cm; +Y atas, +Z depan):
+ *   kacamata, topi, mahkota, telinga. Contoh penempatan aset: `tools/fit_face_props.py`.
+ *
+ * @param imageUrl `file:///android_asset/…`, http/https, `content://`, `file://`, atau path berkas.
+ *   Contoh siap pakai & templat: `tools/templat/` (panduan UV, kepala standar untuk Blender).
  */
 public data class FaceEffect(
     val name: String,
     val imageUrl: String,
-    val anchor: FaceAnchor,
-    val scale: Float = 1f,
-    val offsetY: Float = 0f,
-    val side: FaceSide = FaceSide.Both,
-)
-
-/** Sisi efek untuk telinga, pipi, dan mata (sisi orangnya, bukan sisi layar). */
-public enum class FaceSide {
-    Left,
-    Right,
-    Both,
-}
-
-/**
- * Titik tempel efek wajah. Untuk [Ear], [Cheek], [Eye] pilih sisi lewat [FaceEffect.side]
- * (sisi **orangnya**, tetap benar walau kamera depan di-mirror). Efek di sisi yang membelakangi
- * kamera saat kepala menoleh disembunyikan.
- */
-public enum class FaceAnchor {
-    /** Di tengah kedua mata, selebar wajah (kacamata, topeng mata). */
-    Eyes,
-
-    /** Di atas dahi, sedikit lebih lebar dari wajah (topi, mahkota, telinga hewan). */
-    Head,
-
-    /** Di tengah dahi (bindi, bintang, stiker kecil). */
-    Forehead,
-
-    /** Di ujung hidung (hidung badut, hidung hewan). */
-    Nose,
-
-    /** Di antara hidung dan bibir atas (kumis). */
-    Mouth,
-
-    /** Di bawah bibir sampai dagu (janggut). */
-    Chin,
-
-    /** Menutupi seluruh wajah (topeng). */
-    Face,
-
-    /** Telinga, sesuai [FaceEffect.side] (bunga, anting). */
-    Ear,
-
-    /** Pipi, sesuai [FaceEffect.side] (rona, hati, stiker). */
-    Cheek,
-
-    /** Masing-masing mata, sesuai [FaceEffect.side] (hati di mata, monokel). Untuk kacamata pakai [Eyes]. */
-    Eye,
+    /** Gambar kecil untuk daftar pilihan efek (mis. di kamera zinmedia); `null` = tanpa gambar. */
+    val iconUrl: String? = null,
+) {
+    /** `true` bila [imageUrl] model 3D (`.glb`). */
+    public val isModel: Boolean get() = imageUrl.substringBefore('?').endsWith(".glb", ignoreCase = true)
 }

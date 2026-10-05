@@ -19,9 +19,9 @@ import androidx.camera.core.SurfaceOutput
 import androidx.camera.core.SurfaceProcessor
 import androidx.camera.core.SurfaceRequest
 import androidx.core.util.Consumer
-import com.zinmedia.camera.face.FaceQuad
 import com.zinmedia.effects.gl.CubeLut
 import com.zinmedia.effects.gl.EffectShaders
+import com.zinmedia.effects.gl.FaceEffectEngine
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -46,7 +46,9 @@ internal class FilterEffect(processor: FilterProcessor) : CameraEffect(
 
 /**
  * Pemroses frame kamera di GPU. Input dari kamera (tekstur OES) digambar dengan shader filter ke
- * setiap output (preview, encoder video). Semua kerja GL berjalan di satu thread khusus.
+ * setiap output (preview, encoder video, siaran), lalu efek wajah ([faceEngine]) di atasnya. Dengan
+ * efek wajah aktif, frame ditahan sampai titik wajahnya siap; cap waktu frame ikut ditahan, sehingga
+ * rekaman tetap sinkron dengan audio. Semua kerja GL berjalan di satu thread khusus.
  */
 internal class FilterProcessor : SurfaceProcessor {
 
@@ -59,16 +61,34 @@ internal class FilterProcessor : SurfaceProcessor {
     private var config: EGLConfig? = null
     private var pbuffer: EGLSurface = EGL14.EGL_NO_SURFACE
 
-    private var program = 0
-    private var aPosition = 0
-    private var aTexCoord = 0
-    private var uTexMatrix = 0
-    private var uColorMatrix = 0
-    private var uColorOffset = 0
-    private var uLutSize = 0
-    private var uLutMix = 0
-    private var uSmooth = 0
-    private var uTexel = 0
+    /** Program filter untuk satu jenis sumber (OES kamera, atau tekstur 2D frame yang ditahan). */
+    private class FilterProgram(val program: Int) {
+        val aPosition = GLES20.glGetAttribLocation(program, "aPosition")
+        val aTexCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
+        val uTexMatrix = GLES20.glGetUniformLocation(program, "uTexMatrix")
+        val uColorMatrix = GLES20.glGetUniformLocation(program, "uColorMatrix")
+        val uColorOffset = GLES20.glGetUniformLocation(program, "uColorOffset")
+        val uLutSize = GLES20.glGetUniformLocation(program, "uLutSize")
+        val uLutMix = GLES20.glGetUniformLocation(program, "uLutMix")
+        val uSmooth = GLES20.glGetUniformLocation(program, "uSmooth")
+        val uTexel = GLES20.glGetUniformLocation(program, "uTexel")
+
+        init {
+            GLES20.glUseProgram(program)
+            GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "sTexture"), 0)
+            GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "sLut"), 1)
+        }
+    }
+
+    private var oesProgram: FilterProgram? = null
+    private var heldProgram: FilterProgram? = null
+
+    /** Efek wajah: deteksi dari frame kamera, penahan frame, dan penggambar. */
+    val faceEngine = FaceEffectEngine(external = true)
+
+    /** Matriks tekstur & cap waktu per frame yang mungkin ditahan (indeks = nomor frame % ukuran). */
+    private val frameMatrices = Array(FaceEffectEngine.MAX_DELAY + 1) { FloatArray(16) }
+    private val frameTimestamps = LongArray(FaceEffectEngine.MAX_DELAY + 1)
     private var oesTexture = 0
     private var lutTexture = 0
     private var maxTextureSize = 0
@@ -100,32 +120,6 @@ internal class FilterProcessor : SurfaceProcessor {
     }
 
     /** Ganti filter; berlaku mulai frame berikutnya. */
-    // ---- efek wajah ----
-    private var overlayProgram = 0
-    private var oPosition = 0
-    private var oTexCoord = 0
-    private var overlayTexture = 0
-    private var overlayReady = false
-    private val overlayVertices: FloatBuffer = floatBuffer(*FloatArray(16))
-
-    /** Gambar efek wajah baru (null = hapus); diunggah ke GPU di thread GL. */
-    @Volatile
-    private var pendingOverlay: Bitmap? = null
-    @Volatile
-    private var overlayChanged = false
-
-    /** Sudut-sudut efek wajah dalam koordinat sensor (kosong = tidak digambar). */
-    @Volatile
-    var faceQuads: List<FaceQuad> = emptyList()
-
-    fun setOverlayImage(bitmap: Bitmap?) {
-        // Posisi lama milik efek sebelumnya: buang, agar gambar baru tidak sempat tampil di sana
-        // (mis. kumis di mata). Posisi baru datang dari deteksi berikutnya.
-        faceQuads = emptyList()
-        pendingOverlay = bitmap
-        overlayChanged = true
-    }
-
     fun setParams(params: FilterParams) {
         pending = params
     }
@@ -275,8 +269,9 @@ internal class FilterProcessor : SurfaceProcessor {
             input = null
             if (display != EGL14.EGL_NO_DISPLAY) {
                 EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
-                if (program != 0) GLES20.glDeleteProgram(program)
-                if (overlayProgram != 0) GLES20.glDeleteProgram(overlayProgram)
+                oesProgram?.let { GLES20.glDeleteProgram(it.program) }
+                heldProgram?.let { GLES20.glDeleteProgram(it.program) }
+                faceEngine.release()
                 EGL14.eglDestroySurface(display, pbuffer)
                 EGL14.eglDestroyContext(display, context)
                 EGL14.eglTerminate(display)
@@ -296,107 +291,111 @@ internal class FilterProcessor : SurfaceProcessor {
             params = it
         }
         if (params.lut !== uploadedLut) uploadLut(params.lut)
-        if (overlayChanged) uploadOverlay()
+
+        // Efek wajah: simpan frame, deteksi frame tegak, lalu gambar frame yang ditahan.
+        val info = inputInfo
+        var source = oesTexture
+        var external = true
+        var frameMatrix = texMatrix
+        var timestamp = texture.timestamp
+        var uprightToSensor: android.graphics.Matrix? = null
+        if (info != null) {
+            val (detect, sensorToUpright) = streamTransform(info, 1, 1)
+            val held = faceEngine.push(
+                oesTexture, inputWidth, inputHeight,
+                detectMatrix = detect, detectAspect = uprightAspect(info), flipped = false,
+                restoreFbo = 0, restoreWidth = 1, restoreHeight = 1,
+            )
+            if (faceEngine.heldFrame >= 0) {
+                val slot = (faceEngine.pushedFrame % frameMatrices.size).toInt()
+                texMatrix.copyInto(frameMatrices[slot])
+                frameTimestamps[slot] = texture.timestamp
+                val heldSlot = (faceEngine.heldFrame % frameMatrices.size).toInt()
+                source = held
+                external = false
+                frameMatrix = frameMatrices[heldSlot]
+                timestamp = frameTimestamps[heldSlot]
+                uprightToSensor = android.graphics.Matrix().also { sensorToUpright.invert(it) }
+            }
+        }
 
         for ((output, eglSurface) in outputs) {
             EGL14.eglMakeCurrent(display, eglSurface, eglSurface, context)
             GLES20.glViewport(0, 0, output.size.width, output.size.height)
-            output.updateTransformMatrix(outMatrix, texMatrix)
-            draw()
-            drawFaceOverlays(output.sensorToBufferTransform, output.size.width.toFloat(), output.size.height.toFloat())
-            EGLExt.eglPresentationTimeANDROID(display, eglSurface, texture.timestamp)
+            output.updateTransformMatrix(outMatrix, frameMatrix)
+            draw(source, external)
+            uprightToSensor?.let { toSensor ->
+                // Frame tegak (ternormalisasi) -> sensor -> buffer output (rotasi, crop, cermin ikut).
+                val toOutput = android.graphics.Matrix(toSensor).apply { postConcat(output.sensorToBufferTransform) }
+                faceEngine.draw(affine(toOutput), output.size.width, output.size.height, 0)
+            }
+            EGLExt.eglPresentationTimeANDROID(display, eglSurface, timestamp)
             EGL14.eglSwapBuffers(display, eglSurface)
         }
 
-        val info = inputInfo
         if (info != null) {
             for (stream in streamOutputs) {
-                val (tex, sensorToOutput) = streamTransform(info, stream.width, stream.height)
-                tex.copyInto(outMatrix)
+                streamTransform(info, stream.width, stream.height).first.copyInto(outMatrix)
                 EGL14.eglMakeCurrent(display, stream.egl, stream.egl, context)
                 GLES20.glViewport(0, 0, stream.width, stream.height)
-                draw()
-                drawFaceOverlays(sensorToOutput, stream.width.toFloat(), stream.height.toFloat())
-                EGLExt.eglPresentationTimeANDROID(display, stream.egl, texture.timestamp)
+                draw(source, external)
+                // Siaran: frame tegak, tidak di-mirror, bingkai sama dengan frame deteksi.
+                faceEngine.draw(floatArrayOf(stream.width.toFloat(), 0f, 0f, stream.height.toFloat(), 0f, 0f), stream.width, stream.height, 0)
+                EGLExt.eglPresentationTimeANDROID(display, stream.egl, timestamp)
                 EGL14.eglSwapBuffers(display, stream.egl)
             }
         }
     }
 
-    private fun draw() {
-        GLES20.glUseProgram(program)
+    /** Rasio lebar/tinggi frame tegak (crop setelah rotasi). */
+    private fun uprightAspect(info: SurfaceRequest.TransformationInfo): Float {
+        val crop = info.cropRect
+        val turned = (info.rotationDegrees % 180 + 180) % 180 == 90
+        return if (turned) crop.height().toFloat() / crop.width() else crop.width().toFloat() / crop.height()
+    }
+
+    /** android.graphics.Matrix -> (a, b, c, d, tx, ty) untuk [FaceEffectEngine.draw]. */
+    private fun affine(m: android.graphics.Matrix): FloatArray {
+        val v = FloatArray(9).also(m::getValues)
+        return floatArrayOf(
+            v[android.graphics.Matrix.MSCALE_X], v[android.graphics.Matrix.MSKEW_Y],
+            v[android.graphics.Matrix.MSKEW_X], v[android.graphics.Matrix.MSCALE_Y],
+            v[android.graphics.Matrix.MTRANS_X], v[android.graphics.Matrix.MTRANS_Y],
+        )
+    }
+
+    /** Gambar [source] (OES kamera bila [external], selain itu tekstur 2D) dengan filter ke output aktif. */
+    private fun draw(source: Int, external: Boolean) {
+        val p = (if (external) oesProgram else heldProgram) ?: return
+        GLES20.glUseProgram(p.program)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture)
+        GLES20.glBindTexture(if (external) GLES11Ext.GL_TEXTURE_EXTERNAL_OES else GLES20.GL_TEXTURE_2D, source)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, lutTexture)
 
-        GLES20.glUniformMatrix4fv(uTexMatrix, 1, false, outMatrix, 0)
+        GLES20.glUniformMatrix4fv(p.uTexMatrix, 1, false, outMatrix, 0)
         // GLSL mat3 kolom-mayor (ES 2.0 tidak mendukung transpose=true): transpos manual.
         for (row in 0 until 3) for (col in 0 until 3) colorMatrix[col * 3 + row] = params.matrix[row * 3 + col]
-        GLES20.glUniformMatrix3fv(uColorMatrix, 1, false, colorMatrix, 0)
-        GLES20.glUniform3fv(uColorOffset, 1, params.offset, 0)
+        GLES20.glUniformMatrix3fv(p.uColorMatrix, 1, false, colorMatrix, 0)
+        GLES20.glUniform3fv(p.uColorOffset, 1, params.offset, 0)
         val lut = uploadedLut
-        GLES20.glUniform1f(uLutSize, (lut?.size ?: 2).toFloat())
-        GLES20.glUniform1f(uLutMix, if (lut != null) 1f else 0f)
-        GLES20.glUniform1f(uSmooth, params.smoothing)
-        GLES20.glUniform2f(uTexel, 1f / inputWidth, 1f / inputHeight)
+        GLES20.glUniform1f(p.uLutSize, (lut?.size ?: 2).toFloat())
+        GLES20.glUniform1f(p.uLutMix, if (lut != null) 1f else 0f)
+        GLES20.glUniform1f(p.uSmooth, params.smoothing)
+        GLES20.glUniform2f(p.uTexel, 1f / inputWidth, 1f / inputHeight)
 
         vertices.position(0)
-        GLES20.glVertexAttribPointer(aPosition, 2, GLES20.GL_FLOAT, false, 16, vertices)
-        GLES20.glEnableVertexAttribArray(aPosition)
+        GLES20.glVertexAttribPointer(p.aPosition, 2, GLES20.GL_FLOAT, false, 16, vertices)
+        GLES20.glEnableVertexAttribArray(p.aPosition)
         vertices.position(2)
-        GLES20.glVertexAttribPointer(aTexCoord, 2, GLES20.GL_FLOAT, false, 16, vertices)
-        GLES20.glEnableVertexAttribArray(aTexCoord)
+        GLES20.glVertexAttribPointer(p.aTexCoord, 2, GLES20.GL_FLOAT, false, 16, vertices)
+        GLES20.glEnableVertexAttribArray(p.aTexCoord)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-    }
-
-    private fun uploadOverlay() {
-        overlayChanged = false
-        val bitmap = pendingOverlay
-        overlayReady = false
-        if (bitmap == null || bitmap.isRecycled) return
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, overlayTexture)
-        android.opengl.GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
-        overlayReady = true
-    }
-
-    /**
-     * Gambar efek wajah di atas frame. Sudut efek (koordinat sensor) dipetakan ke buffer output
-     * memakai transformasi sensor->buffer milik output itu (rotasi, crop, mirror ikut), lalu ke NDC.
-     */
-    private fun drawFaceOverlays(sensorToBuffer: android.graphics.Matrix, width: Float, height: Float) {
-        val quads = faceQuads
-        if (!overlayReady || quads.isEmpty()) return
-        GLES20.glUseProgram(overlayProgram)
-        GLES20.glEnable(GLES20.GL_BLEND)
-        // Tekstur dari Bitmap ber-alfa premultiplied.
-        GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+        GLES20.glDisableVertexAttribArray(p.aPosition)
+        GLES20.glDisableVertexAttribArray(p.aTexCoord)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, overlayTexture)
-        val texCoords = floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f)
-        val points = FloatArray(8)
-        for (quad in quads) {
-            quad.sensorPoints.copyInto(points)
-            sensorToBuffer.mapPoints(points)
-            // Sudut: kiri-atas, kanan-atas, kiri-bawah, kanan-bawah (tekstur t=0 di atas).
-            val data = FloatArray(16)
-            for (i in 0 until 4) {
-                data[i * 4] = points[i * 2] / width * 2f - 1f
-                data[i * 4 + 1] = 1f - points[i * 2 + 1] / height * 2f
-                data[i * 4 + 2] = texCoords[i * 2]
-                data[i * 4 + 3] = texCoords[i * 2 + 1]
-            }
-            overlayVertices.position(0)
-            overlayVertices.put(data)
-            overlayVertices.position(0)
-            GLES20.glVertexAttribPointer(oPosition, 2, GLES20.GL_FLOAT, false, 16, overlayVertices)
-            GLES20.glEnableVertexAttribArray(oPosition)
-            overlayVertices.position(2)
-            GLES20.glVertexAttribPointer(oTexCoord, 2, GLES20.GL_FLOAT, false, 16, overlayVertices)
-            GLES20.glEnableVertexAttribArray(oTexCoord)
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-        }
-        GLES20.glDisable(GLES20.GL_BLEND)
     }
 
     private fun uploadLut(lut: CubeLut?) {
@@ -441,19 +440,8 @@ internal class FilterProcessor : SurfaceProcessor {
         )
         EGL14.eglMakeCurrent(display, pbuffer, pbuffer, context)
 
-        program = createProgram(EffectShaders.VERTEX, EffectShaders.filterFragment(external = true))
-        aPosition = GLES20.glGetAttribLocation(program, "aPosition")
-        aTexCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
-        uTexMatrix = GLES20.glGetUniformLocation(program, "uTexMatrix")
-        uColorMatrix = GLES20.glGetUniformLocation(program, "uColorMatrix")
-        uColorOffset = GLES20.glGetUniformLocation(program, "uColorOffset")
-        uLutSize = GLES20.glGetUniformLocation(program, "uLutSize")
-        uLutMix = GLES20.glGetUniformLocation(program, "uLutMix")
-        uSmooth = GLES20.glGetUniformLocation(program, "uSmooth")
-        uTexel = GLES20.glGetUniformLocation(program, "uTexel")
-        GLES20.glUseProgram(program)
-        GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "sTexture"), 0)
-        GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "sLut"), 1)
+        oesProgram = FilterProgram(createProgram(EffectShaders.VERTEX, EffectShaders.filterFragment(external = true)))
+        heldProgram = FilterProgram(createProgram(EffectShaders.VERTEX, EffectShaders.filterFragment(external = false)))
 
         val textures = IntArray(2)
         GLES20.glGenTextures(2, textures, 0)
@@ -471,17 +459,7 @@ internal class FilterProcessor : SurfaceProcessor {
         val max = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, max, 0)
         maxTextureSize = max[0]
-
-        overlayProgram = createProgram(EffectShaders.OVERLAY_VERTEX, EffectShaders.OVERLAY_FRAGMENT)
-        oPosition = GLES20.glGetAttribLocation(overlayProgram, "aPosition")
-        oTexCoord = GLES20.glGetAttribLocation(overlayProgram, "aTexCoord")
-        GLES20.glUseProgram(overlayProgram)
-        GLES20.glUniform1i(GLES20.glGetUniformLocation(overlayProgram, "sOverlay"), 0)
-        val overlayTex = IntArray(1)
-        GLES20.glGenTextures(1, overlayTex, 0)
-        overlayTexture = overlayTex[0]
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, overlayTexture)
-        setTextureParams(GLES20.GL_TEXTURE_2D)
+        faceEngine.init()
     }
 
     private fun setTextureParams(target: Int) {
