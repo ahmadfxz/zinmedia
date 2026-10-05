@@ -1,8 +1,8 @@
-package com.zinmedia.camera.face
+package com.zinmedia.effects.face
 
-import com.zinmedia.camera.FaceAnchor
-import com.zinmedia.camera.FaceEffect
-import com.zinmedia.camera.FaceSide
+import com.zinmedia.effects.FaceAnchor
+import com.zinmedia.effects.FaceEffect
+import com.zinmedia.effects.FaceSide
 import kotlin.math.atan2
 import kotlin.math.hypot
 
@@ -257,9 +257,6 @@ internal class OneEuroFilter(
         return 1f / (1f + tau / dt)
     }
 }
-
-/** Empat sudut efek (kiri-atas, kanan-atas, kiri-bawah, kanan-bawah) dalam koordinat sensor kamera. */
-internal class FaceQuad(val sensorPoints: FloatArray)
 
 /**
  * Sudut-sudut [placement] dalam piksel frame tegak [frameWidth]×[frameHeight] (y ke bawah),

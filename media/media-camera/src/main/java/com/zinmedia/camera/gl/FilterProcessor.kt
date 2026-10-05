@@ -20,6 +20,8 @@ import androidx.camera.core.SurfaceProcessor
 import androidx.camera.core.SurfaceRequest
 import androidx.core.util.Consumer
 import com.zinmedia.camera.face.FaceQuad
+import com.zinmedia.effects.gl.CubeLut
+import com.zinmedia.effects.gl.EffectShaders
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -146,7 +148,99 @@ internal class FilterProcessor : SurfaceProcessor {
             if (input === texture) input = null
         }
         texture.setOnFrameAvailableListener({ onFrame(it) }, handler)
+        // Crop (bingkai 9:16), rotasi ke tegak, dan sensor->buffer: untuk output siaran.
+        request.setTransformationInfoListener(executor) { info -> inputInfo = info }
         input = texture
+    }
+
+    // ---- output siaran (mis. encoder live) ----
+
+    private class StreamOutput(val surface: Surface, val width: Int, val height: Int, val egl: EGLSurface)
+
+    private val streamOutputs = ArrayList<StreamOutput>()
+    private var inputInfo: SurfaceRequest.TransformationInfo? = null
+
+    /**
+     * Tambah output siaran [surface] berukuran [width]×[height]: frame tegak, bingkai sama dengan
+     * preview, **tidak** di-mirror (apa adanya untuk penonton), lengkap dengan filter & efek wajah.
+     */
+    fun addStreamOutput(surface: Surface, width: Int, height: Int) {
+        handler.post {
+            if (released || display == EGL14.EGL_NO_DISPLAY || streamOutputs.any { it.surface === surface }) return@post
+            val egl = EGL14.eglCreateWindowSurface(display, config, surface, intArrayOf(EGL14.EGL_NONE), 0)
+            if (egl == EGL14.EGL_NO_SURFACE) {
+                Log.e(TAG, "Gagal membuat EGL surface siaran")
+                return@post
+            }
+            streamOutputs += StreamOutput(surface, width, height, egl)
+        }
+    }
+
+    fun removeStreamOutput(surface: Surface) {
+        handler.post {
+            streamOutputs.removeAll { output ->
+                (output.surface === surface).also { match ->
+                    if (match && display != EGL14.EGL_NO_DISPLAY) EGL14.eglDestroySurface(display, output.egl)
+                }
+            }
+        }
+    }
+
+    /**
+     * Matriks tekstur & sensor->output untuk output siaran tegak: koordinat output (u, v; v ke bawah)
+     * -> buffer kamera lewat crop & rotasi dari [SurfaceRequest.TransformationInfo].
+     */
+    private fun streamTransform(info: SurfaceRequest.TransformationInfo, width: Int, height: Int): Pair<FloatArray, android.graphics.Matrix> {
+        val crop = info.cropRect
+        val bw = inputWidth.toFloat()
+        val bh = inputHeight.toFloat()
+        // Tegak ternormalisasi (u, v) -> buffer-crop ternormalisasi (bx, by).
+        fun toBufferCrop(u: Float, v: Float): Pair<Float, Float> = when ((info.rotationDegrees % 360 + 360) % 360) {
+            90 -> v to 1f - u
+            180 -> 1f - u to 1f - v
+            270 -> 1f - v to u
+            else -> u to v
+        }
+        // (s, t) tekstur standar (t ke atas) dari titik output.
+        fun texAt(u: Float, v: Float): Pair<Float, Float> {
+            val (bx, by) = toBufferCrop(u, v)
+            val x = (crop.left + bx * crop.width()) / bw
+            val y = (crop.top + by * crop.height()) / bh
+            return x to 1f - y
+        }
+        // Output (s, t) dengan t ke atas: (0,0)=kiri-bawah -> v = 1.
+        val (ox, oy) = texAt(0f, 1f)
+        val (sx, sy) = texAt(1f, 1f)
+        val (tx, ty) = texAt(0f, 0f)
+        val base = floatArrayOf(
+            sx - ox, sy - oy, 0f, 0f,
+            tx - ox, ty - oy, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            ox, oy, 0f, 1f,
+        )
+        // Crop & rotasi CameraX mengacu ke buffer mentah. Matriks SurfaceTexture juga memuat rotasi
+        // bawaan perangkat (berbeda kamera depan/belakang) yang di sini tidak boleh ikut: cukup
+        // pembalikan sumbu y standar (baris pertama buffer = atas gambar).
+        val tex = FloatArray(16)
+        android.opengl.Matrix.multiplyMM(tex, 0, RawBufferTexMatrix, 0, base, 0)
+
+        // sensor -> buffer (piksel) -> tegak ternormalisasi -> piksel output.
+        val toOutput = android.graphics.Matrix(info.sensorToBufferTransform)
+        toOutput.postTranslate(-crop.left.toFloat(), -crop.top.toFloat())
+        toOutput.postScale(1f / crop.width(), 1f / crop.height())
+        val inverseRotation = android.graphics.Matrix().apply {
+            setValues(
+                when ((info.rotationDegrees % 360 + 360) % 360) {
+                    90 -> floatArrayOf(0f, -1f, 1f, 1f, 0f, 0f, 0f, 0f, 1f)
+                    180 -> floatArrayOf(-1f, 0f, 1f, 0f, -1f, 1f, 0f, 0f, 1f)
+                    270 -> floatArrayOf(0f, 1f, 0f, -1f, 0f, 1f, 0f, 0f, 1f)
+                    else -> floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
+                }
+            )
+        }
+        toOutput.postConcat(inverseRotation)
+        toOutput.postScale(width.toFloat(), height.toFloat())
+        return tex to toOutput
     }
 
     override fun onOutputSurface(output: SurfaceOutput) {
@@ -175,6 +269,8 @@ internal class FilterProcessor : SurfaceProcessor {
                 output.close()
             }
             outputs.clear()
+            streamOutputs.forEach { EGL14.eglDestroySurface(display, it.egl) }
+            streamOutputs.clear()
             input?.release()
             input = null
             if (display != EGL14.EGL_NO_DISPLAY) {
@@ -207,9 +303,23 @@ internal class FilterProcessor : SurfaceProcessor {
             GLES20.glViewport(0, 0, output.size.width, output.size.height)
             output.updateTransformMatrix(outMatrix, texMatrix)
             draw()
-            drawFaceOverlays(output)
+            drawFaceOverlays(output.sensorToBufferTransform, output.size.width.toFloat(), output.size.height.toFloat())
             EGLExt.eglPresentationTimeANDROID(display, eglSurface, texture.timestamp)
             EGL14.eglSwapBuffers(display, eglSurface)
+        }
+
+        val info = inputInfo
+        if (info != null) {
+            for (stream in streamOutputs) {
+                val (tex, sensorToOutput) = streamTransform(info, stream.width, stream.height)
+                tex.copyInto(outMatrix)
+                EGL14.eglMakeCurrent(display, stream.egl, stream.egl, context)
+                GLES20.glViewport(0, 0, stream.width, stream.height)
+                draw()
+                drawFaceOverlays(sensorToOutput, stream.width.toFloat(), stream.height.toFloat())
+                EGLExt.eglPresentationTimeANDROID(display, stream.egl, texture.timestamp)
+                EGL14.eglSwapBuffers(display, stream.egl)
+            }
         }
     }
 
@@ -254,12 +364,9 @@ internal class FilterProcessor : SurfaceProcessor {
      * Gambar efek wajah di atas frame. Sudut efek (koordinat sensor) dipetakan ke buffer output
      * memakai transformasi sensor->buffer milik output itu (rotasi, crop, mirror ikut), lalu ke NDC.
      */
-    private fun drawFaceOverlays(output: SurfaceOutput) {
+    private fun drawFaceOverlays(sensorToBuffer: android.graphics.Matrix, width: Float, height: Float) {
         val quads = faceQuads
         if (!overlayReady || quads.isEmpty()) return
-        val width = output.size.width.toFloat()
-        val height = output.size.height.toFloat()
-        val sensorToBuffer = output.sensorToBufferTransform
         GLES20.glUseProgram(overlayProgram)
         GLES20.glEnable(GLES20.GL_BLEND)
         // Tekstur dari Bitmap ber-alfa premultiplied.
@@ -334,7 +441,7 @@ internal class FilterProcessor : SurfaceProcessor {
         )
         EGL14.eglMakeCurrent(display, pbuffer, pbuffer, context)
 
-        program = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
+        program = createProgram(EffectShaders.VERTEX, EffectShaders.filterFragment(external = true))
         aPosition = GLES20.glGetAttribLocation(program, "aPosition")
         aTexCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
         uTexMatrix = GLES20.glGetUniformLocation(program, "uTexMatrix")
@@ -365,7 +472,7 @@ internal class FilterProcessor : SurfaceProcessor {
         GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, max, 0)
         maxTextureSize = max[0]
 
-        overlayProgram = createProgram(OVERLAY_VERTEX_SHADER, OVERLAY_FRAGMENT_SHADER)
+        overlayProgram = createProgram(EffectShaders.OVERLAY_VERTEX, EffectShaders.OVERLAY_FRAGMENT)
         oPosition = GLES20.glGetAttribLocation(overlayProgram, "aPosition")
         oTexCoord = GLES20.glGetAttribLocation(overlayProgram, "aTexCoord")
         GLES20.glUseProgram(overlayProgram)
@@ -404,91 +511,18 @@ internal class FilterProcessor : SurfaceProcessor {
 
     private companion object {
         const val EGL_RECORDABLE_ANDROID = 0x3142
-
-        const val OVERLAY_VERTEX_SHADER = """
-            attribute vec4 aPosition;
-            attribute vec2 aTexCoord;
-            varying vec2 vTexCoord;
-            void main() {
-                gl_Position = aPosition;
-                vTexCoord = aTexCoord;
-            }
-        """
-
-        const val OVERLAY_FRAGMENT_SHADER = """
-            precision mediump float;
-            uniform sampler2D sOverlay;
-            varying vec2 vTexCoord;
-            void main() {
-                gl_FragColor = texture2D(sOverlay, vTexCoord);
-            }
-        """
-
-        const val VERTEX_SHADER = """
-            attribute vec4 aPosition;
-            attribute vec4 aTexCoord;
-            uniform mat4 uTexMatrix;
-            varying vec2 vTexCoord;
-            void main() {
-                gl_Position = aPosition;
-                vTexCoord = (uTexMatrix * aTexCoord).xy;
-            }
-        """
-
-        const val FRAGMENT_SHADER = """
-            #extension GL_OES_EGL_image_external : require
-            precision mediump float;
-            uniform samplerExternalOES sTexture;
-            uniform sampler2D sLut;
-            uniform mat3 uColorMatrix;
-            uniform vec3 uColorOffset;
-            uniform float uLutSize;
-            uniform float uLutMix;
-            uniform float uSmooth;
-            uniform vec2 uTexel;
-            varying vec2 vTexCoord;
-
-            vec3 applyLut(vec3 c) {
-                float n = uLutSize;
-                float blue = c.b * (n - 1.0);
-                float b0 = floor(blue);
-                float b1 = min(b0 + 1.0, n - 1.0);
-                float x = c.r * (n - 1.0) + 0.5;
-                float y = (c.g * (n - 1.0) + 0.5) / n;
-                vec3 c0 = texture2D(sLut, vec2((b0 * n + x) / (n * n), y)).rgb;
-                vec3 c1 = texture2D(sLut, vec2((b1 * n + x) / (n * n), y)).rgb;
-                return mix(c0, c1, blue - b0);
-            }
-
-            // Penghalus kulit sederhana: rata-rata tetangga yang warnanya mirip (bilateral ringan),
-            // sehingga tepi tetap tajam.
-            vec3 smoothSkin(vec3 c) {
-                vec3 sum = c;
-                float total = 1.0;
-                for (int i = 0; i < 8; i++) {
-                    float a = float(i) * 0.785398;
-                    vec2 offset = vec2(cos(a), sin(a)) * uTexel * 3.0;
-                    vec3 s = texture2D(sTexture, vTexCoord + offset).rgb;
-                    float w = max(0.0, 1.0 - distance(s, c) * 6.0);
-                    sum += s * w;
-                    total += w;
-                }
-                vec3 blurred = sum / total;
-                return mix(c, blurred, uSmooth) + uSmooth * 0.03;
-            }
-
-            void main() {
-                vec3 c = texture2D(sTexture, vTexCoord).rgb;
-                if (uSmooth > 0.0) c = smoothSkin(c);
-                c = clamp(uColorMatrix * c + uColorOffset, 0.0, 1.0);
-                if (uLutMix > 0.0) c = mix(c, applyLut(c), uLutMix);
-                gl_FragColor = vec4(c, 1.0);
-            }
-        """
     }
 }
 
 private const val TAG = "FilterProcessor"
+
+/** Matriks tekstur buffer mentah: hanya membalik sumbu y (kolom-mayor). */
+private val RawBufferTexMatrix = floatArrayOf(
+    1f, 0f, 0f, 0f,
+    0f, -1f, 0f, 0f,
+    0f, 0f, 1f, 0f,
+    0f, 1f, 0f, 1f,
+)
 
 private fun floatBuffer(vararg values: Float): FloatBuffer =
     ByteBuffer.allocateDirect(values.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {

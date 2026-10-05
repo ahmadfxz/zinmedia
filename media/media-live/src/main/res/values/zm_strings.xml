@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="zm_live_error_open">Kamera atau mikrofon tidak dapat dibuka</string>
+    <string name="zm_live_error_dropped">Siaran terputus: %1$s</string>
+    <string name="zm_live_error_auth">Kunci siaran ditolak server</string>
+    <string name="zm_live_error_start">Gagal memulai siaran</string>
+</resources>

@@ -1,6 +1,7 @@
-package com.zinmedia.camera.gl
+package com.zinmedia.effects.gl
 
 import android.util.Log
+import androidx.annotation.RestrictTo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
@@ -14,9 +15,10 @@ import java.util.concurrent.ConcurrentHashMap
  * LUT 3D berukuran [size]³, disusun sebagai tekstur 2D: lebar `size × size` (irisan biru
  * berderet), tinggi `size`. Piksel (x = b·size + r, y = g) = warna hasil untuk (r, g, b).
  */
-internal class CubeLut(val size: Int, val rgba: ByteBuffer) {
-    val width: Int get() = size * size
-    val height: Int get() = size
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+public class CubeLut(public val size: Int, public val rgba: ByteBuffer) {
+    public val width: Int get() = size * size
+    public val height: Int get() = size
 }
 
 /** Baca file `.cube` (urutan data: merah tercepat, lalu hijau, lalu biru). */
@@ -55,7 +57,8 @@ private val Whitespace = Regex("\\s+")
 private val cache = ConcurrentHashMap<String, CubeLut>()
 
 /** Unduh & baca LUT (disimpan di memori setelah dimuat sekali); `null` bila gagal. */
-internal suspend fun loadCubeLut(url: String): CubeLut? {
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+public suspend fun loadCubeLut(url: String): CubeLut? {
     cache[url]?.let { return it }
     return withContext(Dispatchers.IO) {
         try {

@@ -1,12 +1,12 @@
-package com.zinmedia.camera
+package com.zinmedia.effects
 
-import com.zinmedia.camera.gl.parseCube
+import com.zinmedia.effects.gl.parseCube
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-class CameraFilterTest {
+class EffectFilterTest {
 
     private fun apply(t: ColorTransform, r: Float, g: Float, b: Float): FloatArray {
         val m = t.matrix
@@ -56,11 +56,5 @@ class CameraFilterTest {
     @Test
     fun parseCube_rejectsIncompleteData() {
         assertNull(parseCube("LUT_3D_SIZE 2\n0 0 0\n".byteInputStream()))
-    }
-
-    @Test
-    fun segment_outputDurationFollowsSpeed() {
-        assertEquals(2000L, Segment(java.io.File("x"), speed = 2f, recordedMs = 4000).outputMs)
-        assertEquals(10000L, Segment(java.io.File("x"), speed = 0.5f, recordedMs = 5000).outputMs)
     }
 }

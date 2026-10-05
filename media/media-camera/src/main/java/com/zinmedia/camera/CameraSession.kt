@@ -35,7 +35,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.zinmedia.camera.gl.FilterEffect
 import com.zinmedia.camera.gl.FilterParams
 import com.zinmedia.camera.gl.FilterProcessor
-import com.zinmedia.camera.gl.loadCubeLut
+import com.zinmedia.effects.gl.loadCubeLut
 import java.io.File
 
 /**
@@ -46,6 +46,10 @@ internal class CameraSession(
     private val context: Context,
     private val lifecycleOwner: LifecycleOwner,
     val previewView: PreviewView,
+    /** `false` untuk live: tanpa perekam video (encoder dipakai pengirim siaran). */
+    private val withVideoCapture: Boolean = true,
+    /** Pasang analisis frame (efek wajah) saat diikat; live selalu, kamera biasa bila ada efek. */
+    private val wantsAnalysis: Boolean = CameraConfig.faceEffects.isNotEmpty(),
 ) {
     private val processor = FilterProcessor()
     private val effect = FilterEffect(processor)
@@ -59,7 +63,6 @@ internal class CameraSession(
      * Analisis frame dipasang sekali saat kamera diikat (hanya bila aplikasi punya efek wajah),
      * agar memilih/menghapus efek tidak mengikat ulang kamera (layar berkedip hitam).
      */
-    private val wantsAnalysis = CameraConfig.faceEffects.isNotEmpty()
     private var imageAnalysis: ImageAnalysis? = null
     private val analysisExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
@@ -99,7 +102,7 @@ internal class CameraSession(
         val recorder = Recorder.Builder()
             .setQualitySelector(QualitySelector.from(Quality.HD))
             .build()
-        val video = VideoCapture.Builder(recorder)
+        val video = if (!withVideoCapture) null else VideoCapture.Builder(recorder)
             .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
             .build()
         // Analisis frame (efek wajah) hanya dipasang saat efek aktif: frame kecil, hanya yang terbaru.
@@ -119,7 +122,7 @@ internal class CameraSession(
         }
         fun group(withAnalysis: Boolean) = UseCaseGroup.Builder()
             .addUseCase(preview)
-            .addUseCase(video)
+            .apply { if (video != null) addUseCase(video) }
             .apply { if (withAnalysis && analysis != null) addUseCase(analysis) }
             .addEffect(effect)
             .apply { previewView.viewPort?.let(::setViewPort) }
@@ -178,6 +181,12 @@ internal class CameraSession(
         val analyzer = faceAnalyzer
         if (analyzer != null) analysis.setAnalyzer(analysisExecutor, analyzer) else analysis.clearAnalyzer()
     }
+
+    /** Output siaran (mis. encoder live): frame tegak, tidak di-mirror, dengan filter & efek. */
+    fun addStreamOutput(surface: android.view.Surface, width: Int, height: Int) =
+        processor.addStreamOutput(surface, width, height)
+
+    fun removeStreamOutput(surface: android.view.Surface) = processor.removeStreamOutput(surface)
 
     fun setFaceOverlayImage(bitmap: android.graphics.Bitmap?) = processor.setOverlayImage(bitmap)
 

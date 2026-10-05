@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.zinmedia.camera"
+    namespace = "com.zinmedia.live"
     compileSdk = 36
     // Semua resource library berawalan zm_ agar tidak bentrok dengan resource aplikasi.
     resourcePrefix = "zm_"
@@ -37,23 +37,10 @@ kotlin {
 }
 
 dependencies {
-    // Hasil kamera langsung dibuka di editor gabungan (foto & video ikut tersedia).
-    api(project(":media:media-composer"))
-    // Filter warna, LUT, dan efek wajah (dipakai bersama efek siaran).
-    api(project(":media:media-effects"))
-
-    implementation(libs.androidx.camera.core)
-    implementation(libs.androidx.camera.camera2)
-    implementation(libs.androidx.camera.lifecycle)
-    implementation(libs.androidx.camera.video)
-    implementation(libs.androidx.camera.view)
-    implementation(libs.androidx.media3.transformer)
-    implementation(libs.androidx.media3.effect)
-    implementation(libs.androidx.media3.common)
-    // Efek wajah (titik wajah per frame).
-    implementation(libs.mediapipe.tasks.vision)
-    implementation(libs.coil.compose)
-    implementation(libs.coil.network.okhttp)
+    // Kamera (preview, filter, efek wajah) dari media-camera.
+    api(project(":media:media-camera"))
+    // Pengirim RTMP (encoder H.264/AAC).
+    implementation(libs.rootencoder)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

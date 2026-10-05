@@ -27,6 +27,8 @@ import java.io.File
  *
  * Buka langsung dengan media contoh lewat adb:
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open camera
+ *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open live   # RTMP lokal, lihat di bawah
+ *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open effects   # efek di RootEncoder milik aplikasi
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open photo
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open video
  *   adb shell am start -n com.zinmedia.sample/.MainActivity --es open mixed
@@ -103,6 +105,8 @@ class MainActivity : ComponentActivity() {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(64, 64, 64, 64)
             addView(button("Kamera") { openSample("camera") })
+            addView(button("Live (RTMP lokal)") { openSample("live") })
+            addView(button("Efek siaran (RootEncoder aplikasi)") { openSample("effects") })
             addView(button("Foto contoh") { openSample("photo") })
             addView(button("Video contoh") { openSample("video") })
             addView(button("Gabungan contoh (2 foto + video)") { openSample("mixed") })
@@ -146,6 +150,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openSample(type: String) {
+        if (type == "live" || type == "effects") {
+            // Server RTMP lokal di komputer (mis. MediaMTX), lewat: adb reverse tcp:1935 tcp:1935
+            val url = intent.getStringExtra("url") ?: "rtmp://127.0.0.1:1935/live/test"
+            val screen = if (type == "live") LiveDemoActivity::class.java else EffectsDemoActivity::class.java
+            startActivity(Intent(this, screen).putExtra("url", url))
+            return
+        }
         if (type == "camera") {
             editorLauncher.launch(Intent(this, CameraActivity::class.java))
             return

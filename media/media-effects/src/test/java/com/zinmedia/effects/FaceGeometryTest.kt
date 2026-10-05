@@ -1,9 +1,9 @@
-package com.zinmedia.camera
+package com.zinmedia.effects
 
-import com.zinmedia.camera.face.FacePoints
-import com.zinmedia.camera.face.Landmark
-import com.zinmedia.camera.face.OneEuroFilter
-import com.zinmedia.camera.face.placeFaceEffects
+import com.zinmedia.effects.face.FacePoints
+import com.zinmedia.effects.face.Landmark
+import com.zinmedia.effects.face.OneEuroFilter
+import com.zinmedia.effects.face.placeFaceEffects
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -171,7 +171,7 @@ class FaceGeometryTest {
         val down = placeFaceEffects(face3d(0.5f), effect, 0.57f, 360f, 640f).single()
         val up = placeFaceEffects(face3d(-0.5f), effect, 0.57f, 360f, 640f).single()
         // Relatif terhadap garis rambut (dahi atas) di masing-masing pose.
-        fun gap(p: com.zinmedia.camera.face.FacePlacement, pts: FacePoints) = pts.py(Landmark.FOREHEAD_TOP) - p.centerY * 640f
+        fun gap(p: com.zinmedia.effects.face.FacePlacement, pts: FacePoints) = pts.py(Landmark.FOREHEAD_TOP) - p.centerY * 640f
         val gLevel = gap(level, face3d(0f))
         val gDown = gap(down, face3d(0.5f))
         val gUp = gap(up, face3d(-0.5f))

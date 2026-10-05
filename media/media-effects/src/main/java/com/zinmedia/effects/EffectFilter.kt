@@ -1,12 +1,18 @@
-package com.zinmedia.camera
+package com.zinmedia.effects
 
-import com.zinmedia.videoeditor.VideoEditorConfig
+import androidx.annotation.RestrictTo
 
 /**
- * Filter warna kamera: transformasi warna affine (`out = matrix × rgb + offset`) dan/atau LUT `.cube`.
- * Diterapkan real-time di GPU, sama untuk preview, foto, dan video.
+ * Filter LUT milik aplikasi: file `.cube` (diunduh saat pertama dipilih lalu disimpan di memori).
  */
-internal data class CameraFilter(
+public data class LutFilter(val name: String, val cubeUrl: String)
+
+/**
+ * Filter warna: transformasi warna affine (`out = matrix × rgb + offset`) dan/atau LUT `.cube`.
+ * Diterapkan real-time di GPU.
+ */
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+public data class EffectFilter(
     val name: String,
     /** Matriks 3×3 baris-mayor. */
     val matrix: FloatArray = IdentityMatrix,
@@ -16,7 +22,7 @@ internal data class CameraFilter(
     /** Warna contoh untuk tombol filter. */
     val swatch: Long = 0xFF808080,
 ) {
-    override fun equals(other: Any?): Boolean = other is CameraFilter && other.name == name
+    override fun equals(other: Any?): Boolean = other is EffectFilter && other.name == name
     override fun hashCode(): Int = name.hashCode()
 }
 
@@ -76,17 +82,18 @@ internal class ColorTransform {
         )
     )
 
-    fun build(name: String, swatch: Long): CameraFilter = CameraFilter(name, matrix, offset, swatch = swatch)
+    fun build(name: String, swatch: Long): EffectFilter = EffectFilter(name, matrix, offset, swatch = swatch)
 }
 
-/** Filter bawaan, lalu filter LUT milik aplikasi (dari [VideoEditorConfig.filters]). */
-internal fun cameraFilters(): List<CameraFilter> = BuiltInFilters + VideoEditorConfig.filters.map {
-    CameraFilter(name = it.name, lutUrl = it.cubeUrl, swatch = 0xFF6D6D6D)
+/** Filter bawaan (indeks 0 = tanpa filter), lalu filter LUT milik aplikasi. */
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+public fun effectFilters(lutFilters: List<LutFilter>): List<EffectFilter> = BuiltInFilters + lutFilters.map {
+    EffectFilter(name = it.name, lutUrl = it.cubeUrl, swatch = 0xFF6D6D6D)
 }
 
-internal val NormalFilter = CameraFilter("Normal", swatch = 0xFF9E9E9E)
+private val NormalFilter = EffectFilter("Normal", swatch = 0xFF9E9E9E)
 
-private val BuiltInFilters: List<CameraFilter> = listOf(
+private val BuiltInFilters: List<EffectFilter> = listOf(
     NormalFilter,
     ColorTransform().saturation(1.35f).contrast(1.1f).build("Cerah", 0xFFFF7043),
     ColorTransform().warmth(0.06f).saturation(1.1f).brightness(0.02f).build("Hangat", 0xFFFFB74D),

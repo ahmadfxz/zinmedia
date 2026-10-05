@@ -4,6 +4,8 @@ Library Android (Jetpack Compose) untuk mengedit foto dan video sebelum diunggah
 
 | Modul | Isi |
 |---|---|
+| `media-live` | Kamera siaran langsung RTMP tanpa UI: `com.zinmedia.live.LiveCamera` (isi kamera + fungsi; tombol & layout dari aplikasi). Filter, penghalus, efek wajah ikut tersiar. Sudah termasuk `media-camera`. |
+| `media-effects` | Efek untuk siaran **RootEncoder milik aplikasi**: `com.zinmedia.effects.ZinEffects` (filter warna/LUT, penghalus kulit, efek wajah) sebagai filter GL stream. Kamera, siaran, dan UI tetap milik aplikasi. |
 | `media-camera` | Kamera foto & video ala aplikasi video pendek: filter & efek real-time, penghalus kulit, rekam bersegmen, kecepatan, timer, flash, zoom, galeri (pilih banyak): `com.zinmedia.camera.CameraActivity`. Hasilnya dibuka di editor gabungan. Sudah termasuk semua modul di bawah. |
 | `media-composer` | Editor beberapa foto & video sekaligus (maks. 5, geser antar media): `com.zinmedia.composer.MediaComposerActivity`. Sudah termasuk dua modul di bawah. |
 | `media-photoeditor` | Editor foto: `com.zinmedia.photoeditor.ImageEditorActivity` |
@@ -31,7 +33,7 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "4.7.1"
+zinmedia = "4.8.0"
 
 [libraries]
 zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }
@@ -40,6 +42,10 @@ zinmedia-videoeditor = { module = "com.github.ahmadfxz.zinmedia:media-videoedito
 zinmedia-composer = { module = "com.github.ahmadfxz.zinmedia:media-composer", version.ref = "zinmedia" }
 # atau, kamera + galeri + editor gabungan (semuanya):
 zinmedia-camera = { module = "com.github.ahmadfxz.zinmedia:media-camera", version.ref = "zinmedia" }
+# atau, siaran langsung (sudah termasuk kamera):
+zinmedia-live = { module = "com.github.ahmadfxz.zinmedia:media-live", version.ref = "zinmedia" }
+# atau, hanya efek untuk siaran RootEncoder milik aplikasi:
+zinmedia-effects = { module = "com.github.ahmadfxz.zinmedia:media-effects", version.ref = "zinmedia" }
 ```
 
 **app/build.gradle.kts**
@@ -313,6 +319,85 @@ cameraLauncher.launch(CameraActivity.intent(context, maxItems = 1))  // satu med
 ```
 
 Izin `CAMERA` dan `RECORD_AUDIO` sudah dideklarasikan library dan diminta oleh `CameraActivity`. Tanpa izin mikrofon, video direkam tanpa suara.
+
+## Siaran langsung (media-live)
+
+`LiveCamera` hanya menyediakan **isi kamera** dan **fungsi**. Layout, tombol live, chat, gift, dan kapan efek dipasang sepenuhnya milik aplikasi. Video dikirim ke server **RTMP** (mis. MediaMTX, nginx-rtmp) memakai [RootEncoder](https://github.com/pedroSG94/RootEncoder).
+
+```kotlin
+// Satu instance per layar live (mis. di Activity/ViewModel); release() saat selesai.
+val live = LiveCamera(context, lifecycleOwner)
+
+@Composable
+fun LiveScreen() {
+    val state by live.state.collectAsState()           // Idle / Connecting / Live / Reconnecting / Error
+    Box {
+        live.Preview(Modifier.fillMaxWidth().aspectRatio(9f / 16f))   // isi kamera saja
+        // ... chat, gift, penonton milik aplikasi ...
+        Button(onClick = { if (state.isActive) live.stop() else live.start(publishUrl) }) {
+            Text(if (state.isActive) "Akhiri" else "Mulai Live")
+        }
+    }
+}
+
+// Gift dari penonton -> efek wajah yang ikut tersiar (satu efek per waktu).
+scope.launch {
+    live.setFaceEffect(FaceEffect("Kacamata", gift.imageUrl, FaceAnchor.Eyes))
+    delay(10_000)
+    live.setFaceEffect(null)
+}
+```
+
+| Fungsi | Keterangan |
+|---|---|
+| `Preview(modifier, gestures = true)` | Isi kamera; ketuk = fokus, cubit = zoom (`gestures = false` untuk mematikan) |
+| `start(publishUrl)`, `stop()`, `clearError()` | Siaran; status lewat `state: StateFlow<LiveState>` |
+| `setMicMuted(Boolean)` | Mikrofon |
+| `flipCamera()`, `setTorch(Boolean)`, `setZoom(Float)` | Kamera (`isFrontCamera`, `hasFlash`, `zoomRatio`, `minZoom`, `maxZoom`) |
+| `filterNames`, `setFilter(index)`, `setSmoothing(0..1)` | Filter (termasuk LUT dari konfigurasi) & penghalus |
+| `prepareFaceEffects()`, `setFaceEffect(effect?)` | Efek wajah: satu per waktu, menggantikan yang lama; `null` = lepas. `prepareFaceEffects()` mengunduh model lebih awal |
+| `release()` | Wajib saat layar ditutup |
+
+- Video H.264 720×1280 30 fps (turun ke 540×960 bila perlu) + AAC. Bitrate turun otomatis saat unggahan tersendat dan menyambung ulang otomatis bila siaran terputus.
+- Kamera depan tampil seperti cermin bagi penyiar, tetapi dikirim apa adanya ke penonton.
+- Aplikasi meminta izin `CAMERA` & `RECORD_AUDIO` sebelum menampilkan `Preview`, dan sebaiknya menjaga layar tetap menyala selama siaran.
+- Repositori JitPack wajib ada di `settings.gradle.kts` aplikasi (RootEncoder diambil dari JitPack).
+- Siaran berhenti bila aplikasi di-background (layanan latar depan belum tersedia).
+- Contoh lengkap: `sample/…/LiveDemoActivity.kt`.
+
+## Efek siaran RootEncoder (media-effects)
+
+Untuk aplikasi yang sudah punya kamera & siaran sendiri dengan [RootEncoder](https://github.com/pedroSG94/RootEncoder) (`RtmpStream`, `Camera2Source`, dll.). `ZinEffects` dipasang sebagai filter GL stream: efek tampil di preview **dan** ikut terkirim ke penonton.
+
+```kotlin
+// mirrored = true: kamera depan RootEncoder dikirim sebagai gambar cermin.
+val effects = ZinEffects(context, mirrored = true)
+stream.getGlInterface().addFilter(effects.filterRender)
+
+// Saat kamera dibalik:
+camera.switchCamera()
+effects.mirrored = camera.getCameraFacing() == CameraHelper.Facing.FRONT
+
+scope.launch { effects.setFilter(2) }        // indeks dari effects.filterNames (0 = Normal)
+effects.setSmoothing(0.6f)                     // penghalus kulit 0..1
+scope.launch { effects.setFaceEffect(FaceEffect("Kacamata", url, FaceAnchor.Eyes)) }  // null = lepas
+
+effects.release()                              // saat layar/stream selesai
+```
+
+| Fungsi | Keterangan |
+|---|---|
+| `ZinEffects(context, lutFilters, faceModelUrl, maxFaces, mirrored)` | `lutFilters` = filter `.cube` milik aplikasi (setelah filter bawaan) |
+| `filterRender` | Filter untuk `GlStreamInterface.addFilter(...)` |
+| `filterNames`, `filterSwatches`, `setFilter(index)` | Daftar filter (nama + warna contoh) & pilihannya; bisa diganti kapan saja, termasuk saat live |
+| `setSmoothing(0..1)` | Penghalus kulit |
+| `prepareFaceEffects()`, `setFaceEffect(effect?)`, `faceModelProgress` | Efek wajah (satu per waktu). Model MediaPipe diunduh sekali lalu disimpan |
+| `mirrored` | `true` bila frame stream adalah gambar cermin, agar efek kiri/kanan (telinga, pipi, mata) tetap di sisi orangnya |
+| `release()` | Lepas model & efek |
+
+- RootEncoder **tidak** dibawa modul ini: aplikasi menyertakan `com.github.pedroSG94.RootEncoder:library` sendiri (diuji dengan 2.8.1).
+- Aturan R8 untuk MediaPipe sudah disertakan (aman untuk build release yang di-minify).
+- Contoh lengkap: `sample/…/EffectsDemoActivity.kt`.
 
 ## Rilis versi baru
 
