@@ -99,6 +99,21 @@ public class ZinEffects(
         render.params = ColorParams(filter.matrix, filter.offset, lut, smoothing)
     }
 
+    /**
+     * Gambar [source] dengan filter ke-[index] (salinan baru), untuk thumbnail daftar filter.
+     * Filter LUT diunduh dulu bila perlu; LUT yang gagal dimuat = hanya warna dasarnya.
+     */
+    public suspend fun filterPreview(index: Int, source: Bitmap): Bitmap {
+        val filter = filters[index.coerceIn(0, filters.lastIndex)]
+        val lut = filter.lutUrl?.let { loadCubeLut(it) }
+        return withContext(Dispatchers.Default) {
+            val pixels = IntArray(source.width * source.height)
+            source.getPixels(pixels, 0, source.width, 0, 0, source.width, source.height)
+            applyFilter(pixels, filter, lut)
+            Bitmap.createBitmap(pixels, source.width, source.height, Bitmap.Config.ARGB_8888)
+        }
+    }
+
     /** Penghalus kulit 0 (mati)..1. */
     public fun setSmoothing(strength: Float) {
         smoothing = strength.coerceIn(0f, 1f)

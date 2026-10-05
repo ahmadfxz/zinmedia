@@ -57,4 +57,17 @@ class EffectFilterTest {
     fun parseCube_rejectsIncompleteData() {
         assertNull(parseCube("LUT_3D_SIZE 2\n0 0 0\n".byteInputStream()))
     }
+
+    @Test
+    fun applyFilter_grayscaleOnCpu_matchesMatrix() {
+        val filter = ColorTransform().saturation(0f).build("Abu", 0)
+        val pixels = intArrayOf(0xFFFF0000.toInt())
+        applyFilter(pixels, filter, null)
+        val p = pixels[0]
+        val r = p shr 16 and 0xFF
+        assertEquals(r, p shr 8 and 0xFF)
+        assertEquals(r, p and 0xFF)
+        assertEquals((0.2126f * 255 + 0.5f).toInt(), r)
+        assertEquals(0xFF, p ushr 24)
+    }
 }

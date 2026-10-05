@@ -33,7 +33,7 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "4.8.0"
+zinmedia = "4.8.1"
 
 [libraries]
 zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }
@@ -390,6 +390,7 @@ effects.release()                              // saat layar/stream selesai
 | `ZinEffects(context, lutFilters, faceModelUrl, maxFaces, mirrored)` | `lutFilters` = filter `.cube` milik aplikasi (setelah filter bawaan) |
 | `filterRender` | Filter untuk `GlStreamInterface.addFilter(...)` |
 | `filterNames`, `filterSwatches`, `setFilter(index)` | Daftar filter (nama + warna contoh) & pilihannya; bisa diganti kapan saja, termasuk saat live |
+| `filterPreview(index, bitmap)` | Salinan `bitmap` dengan filter itu, untuk thumbnail daftar filter (mis. dari satu foto contoh) |
 | `setSmoothing(0..1)` | Penghalus kulit |
 | `prepareFaceEffects()`, `setFaceEffect(effect?)`, `faceModelProgress` | Efek wajah (satu per waktu). Model MediaPipe diunduh sekali lalu disimpan |
 | `mirrored` | `true` bila frame stream adalah gambar cermin, agar efek kiri/kanan (telinga, pipi, mata) tetap di sisi orangnya |

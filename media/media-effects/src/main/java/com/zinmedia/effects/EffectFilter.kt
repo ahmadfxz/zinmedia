@@ -104,3 +104,32 @@ private val BuiltInFilters: List<EffectFilter> = listOf(
     ColorTransform().contrast(1.3f).saturation(1.15f).brightness(-0.03f).build("Drama", 0xFF5C6BC0),
     ColorTransform().contrast(0.9f).brightness(0.06f).saturation(0.9f).build("Lembut", 0xFFF8BBD0),
 )
+
+/**
+ * Terapkan [filter] ke [pixels] (ARGB) di CPU, sama dengan shader: warna affine lalu LUT
+ * (nearest). Untuk thumbnail filter; terlalu lambat untuk video.
+ */
+internal fun applyFilter(pixels: IntArray, filter: EffectFilter, lut: com.zinmedia.effects.gl.CubeLut?) {
+    val m = filter.matrix
+    val o = filter.offset
+    val n = lut?.size ?: 0
+    for (i in pixels.indices) {
+        val p = pixels[i]
+        val r = (p shr 16 and 0xFF) / 255f
+        val g = (p shr 8 and 0xFF) / 255f
+        val b = (p and 0xFF) / 255f
+        var nr = (m[0] * r + m[1] * g + m[2] * b + o[0]).coerceIn(0f, 1f)
+        var ng = (m[3] * r + m[4] * g + m[5] * b + o[1]).coerceIn(0f, 1f)
+        var nb = (m[6] * r + m[7] * g + m[8] * b + o[2]).coerceIn(0f, 1f)
+        if (lut != null) {
+            val x = (nb * (n - 1) + 0.5f).toInt() * n + (nr * (n - 1) + 0.5f).toInt()
+            val y = (ng * (n - 1) + 0.5f).toInt()
+            val at = (y * lut.width + x) * 4
+            nr = (lut.rgba.get(at).toInt() and 0xFF) / 255f
+            ng = (lut.rgba.get(at + 1).toInt() and 0xFF) / 255f
+            nb = (lut.rgba.get(at + 2).toInt() and 0xFF) / 255f
+        }
+        pixels[i] = (p and 0xFF000000.toInt()) or
+            ((nr * 255f + 0.5f).toInt() shl 16) or ((ng * 255f + 0.5f).toInt() shl 8) or (nb * 255f + 0.5f).toInt()
+    }
+}
