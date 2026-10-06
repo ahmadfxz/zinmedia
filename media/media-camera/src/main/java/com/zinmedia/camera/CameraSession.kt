@@ -31,6 +31,7 @@ import com.zinmedia.camera.gl.FilterEffect
 import com.zinmedia.camera.gl.FilterParams
 import com.zinmedia.camera.gl.FilterProcessor
 import com.zinmedia.effects.gl.loadCubeLut
+import com.zinmedia.effects.BeautyParams
 import java.io.File
 
 /**
@@ -141,9 +142,10 @@ internal class CameraSession(
     }
 
     /** Terapkan filter (LUT diunduh dulu bila perlu). */
-    suspend fun applyFilter(filter: CameraFilter, smoothing: Float) {
+    suspend fun applyFilter(filter: CameraFilter, beauty: BeautyParams) {
         val lut = filter.lutUrl?.let { loadCubeLut(it) }
-        processor.setParams(FilterParams(filter.matrix, filter.offset, lut, smoothing))
+        processor.faceEngine.beauty = beauty
+        processor.setParams(FilterParams(filter.matrix, filter.offset, lut, beauty))
     }
 
     /** Foto = frame preview saat ini (filter & penghalus sudah diterapkan, bingkai sama dengan layar). */

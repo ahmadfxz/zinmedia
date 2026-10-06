@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.LifecycleOwner
 import com.zinmedia.camera.FaceEffect
 import com.zinmedia.camera.LiveCameraHost
+import com.zinmedia.effects.BeautyParams
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -84,6 +85,11 @@ public class LiveCamera(context: Context, lifecycleOwner: LifecycleOwner) {
     /** Penghalus kulit 0 (mati)..1. */
     public suspend fun setSmoothing(strength: Float) {
         camera.setSmoothing(strength)
+    }
+
+    /** Beauty face-aware yang dapat diubah real-time dan digabungkan dengan filter/efek wajah. */
+    public suspend fun setBeauty(params: BeautyParams) {
+        camera.setBeauty(params)
     }
 
     /** Progres unduh model wajah (0..1), `null` bila tidak sedang mengunduh. */

@@ -79,8 +79,13 @@ internal class MeshRenderer {
     private var oTexCoord = 0
     private var oHasTexture = 0
     private var oCutout = 0
+    private var oJoints = 0
+    private var oWeights = 0
+    private var oJointMatrices = 0
+    private var oSkinned = 0
     private var uploadedModel: GlbModel? = null
     private var modelParts: List<ModelPart> = emptyList()
+    private var animationStartedMs = 0L
     private val head = HeadShape()
     private val normalMatrix = FloatArray(9)
 
@@ -116,6 +121,10 @@ internal class MeshRenderer {
         oTexCoord = GLES20.glGetAttribLocation(modelProgram, "aTexCoord")
         oHasTexture = GLES20.glGetUniformLocation(modelProgram, "uHasTexture")
         oCutout = GLES20.glGetUniformLocation(modelProgram, "uCutout")
+        oJoints = GLES20.glGetAttribLocation(modelProgram, "aJoints")
+        oWeights = GLES20.glGetAttribLocation(modelProgram, "aWeights")
+        oJointMatrices = GLES20.glGetUniformLocation(modelProgram, "uJoints")
+        oSkinned = GLES20.glGetUniformLocation(modelProgram, "uSkinned")
         GLES20.glUseProgram(modelProgram)
         GLES20.glUniform1i(GLES20.glGetUniformLocation(modelProgram, "sTexture"), 0)
 
@@ -140,12 +149,20 @@ internal class MeshRenderer {
      * x = a·u + c·v + tx, y = b·u + d·v + ty, sebagai (a, b, c, d, tx, ty). Afin bercermin
      * (determinan negatif) didukung, mis. preview kamera depan.
      */
-    fun draw(effect: ActiveFaceEffect, faces: List<FloatArray>, affine: FloatArray, width: Int, height: Int, targetFbo: Int) {
+    fun draw(
+        effect: ActiveFaceEffect,
+        faces: List<FloatArray>,
+        affine: FloatArray,
+        width: Int,
+        height: Int,
+        targetFbo: Int,
+        frameTimestampMs: Long,
+    ) {
         if (!ready || faces.isEmpty() || width <= 0 || height <= 0) return
         val current = buffers?.takeIf { it.data === effect.mesh } ?: MeshBuffers(effect.mesh).also { buffers = it }
         when (effect) {
             is ActiveFaceEffect.Paint -> drawPaint(current, effect.texture, faces, affine, width, height, targetFbo)
-            is ActiveFaceEffect.Model -> drawModel(current, effect, faces, affine, width, height, targetFbo)
+            is ActiveFaceEffect.Model -> drawModel(current, effect, faces, affine, width, height, targetFbo, frameTimestampMs)
         }
     }
 
@@ -181,12 +198,24 @@ internal class MeshRenderer {
         compositeTo(target, targetFbo)
     }
 
-    private fun drawModel(current: MeshBuffers, effect: ActiveFaceEffect.Model, faces: List<FloatArray>, affine: FloatArray, width: Int, height: Int, targetFbo: Int) {
+    private fun drawModel(
+        current: MeshBuffers,
+        effect: ActiveFaceEffect.Model,
+        faces: List<FloatArray>,
+        affine: FloatArray,
+        width: Int,
+        height: Int,
+        targetFbo: Int,
+        frameTimestampMs: Long,
+    ) {
         if (uploadedModel !== effect.model) {
             modelParts.forEach { it.release() }
             modelParts = effect.model.parts.mapIndexed { i, part -> ModelPart(part, effect.textures.getOrNull(i)) }
             uploadedModel = effect.model
+            animationStartedMs = frameTimestampMs
         }
+        val animationSeconds = (frameTimestampMs - animationStartedMs).coerceAtLeast(0L) / 1_000f
+        val modelPose = effect.model.poseAt(animationSeconds)
         // Keluaran bercermin: pose dicocokkan pada wajah yang dibalik lagi (putaran sejati), lalu
         // model ikut dicerminkan.
         val mirrored = affine[0] * affine[3] - affine[1] * affine[2] < 0f
@@ -222,12 +251,10 @@ internal class MeshRenderer {
                 GLES20.glDepthMask(false)
             }
             for ((_, headPose) in poses) {
-                GLES20.glUniformMatrix4fv(oMvp, 1, false, multiply4(clip, headPose), 0)
-                // Putaran kepala (tanpa skala) untuk normal.
-                val scale = sqrt(headPose[0] * headPose[0] + headPose[1] * headPose[1] + headPose[2] * headPose[2])
-                for (col in 0 until 3) for (row in 0 until 3) normalMatrix[col * 3 + row] = headPose[col * 4 + row] / scale
-                GLES20.glUniformMatrix3fv(oNormalMatrix, 1, false, normalMatrix, 0)
-                for (part in modelParts) if (part.blend == blendPass) part.draw()
+                for ((index, part) in modelParts.withIndex()) if (part.blend == blendPass) {
+                    setModelMatrices(headPose, modelPose.partTransforms[index])
+                    part.draw(modelPose.jointMatrices[index])
+                }
             }
         }
         GLES20.glDisable(GLES20.GL_BLEND)
@@ -235,7 +262,35 @@ internal class MeshRenderer {
         GLES20.glDisableVertexAttribArray(oPosition)
         GLES20.glDisableVertexAttribArray(oNormal)
         GLES20.glDisableVertexAttribArray(oTexCoord)
+        GLES20.glDisableVertexAttribArray(oJoints)
+        GLES20.glDisableVertexAttribArray(oWeights)
         compositeTo(target, targetFbo)
+    }
+
+    /** Matriks posisi dan normal untuk pose kepala × transformasi animasi node. */
+    private fun setModelMatrices(headPose: FloatArray, partTransform: FloatArray) {
+        val model = multiply4(headPose, partTransform)
+        GLES20.glUniformMatrix4fv(oMvp, 1, false, multiply4(clip, model), 0)
+        // inverse-transpose bagian 3×3; benar untuk rotasi, mirror, dan skala tak seragam.
+        val a00 = model[0]; val a01 = model[4]; val a02 = model[8]
+        val a10 = model[1]; val a11 = model[5]; val a12 = model[9]
+        val a20 = model[2]; val a21 = model[6]; val a22 = model[10]
+        val c00 = a11 * a22 - a12 * a21
+        val c01 = a02 * a21 - a01 * a22
+        val c02 = a01 * a12 - a02 * a11
+        val c10 = a12 * a20 - a10 * a22
+        val c11 = a00 * a22 - a02 * a20
+        val c12 = a02 * a10 - a00 * a12
+        val c20 = a10 * a21 - a11 * a20
+        val c21 = a01 * a20 - a00 * a21
+        val c22 = a00 * a11 - a01 * a10
+        val det = a00 * c00 + a01 * c10 + a02 * c20
+        val inverse = if (abs(det) > 1e-9f) 1f / det else 1f
+        // Cofactor matrix = inverse-transpose untuk susunan kolom-mayor.
+        normalMatrix[0] = c00 * inverse; normalMatrix[1] = c01 * inverse; normalMatrix[2] = c02 * inverse
+        normalMatrix[3] = c10 * inverse; normalMatrix[4] = c11 * inverse; normalMatrix[5] = c12 * inverse
+        normalMatrix[6] = c20 * inverse; normalMatrix[7] = c21 * inverse; normalMatrix[8] = c22 * inverse
+        GLES20.glUniformMatrix3fv(oNormalMatrix, 1, false, normalMatrix, 0)
     }
 
     /**
@@ -326,6 +381,7 @@ internal class MeshRenderer {
         GLES20.glDeleteProgram(modelProgram)
         uploadedModel = null
         modelParts = emptyList()
+        animationStartedMs = 0L
         textureId = 0
         textureSource = null
         ready = false
@@ -452,6 +508,8 @@ internal class MeshRenderer {
         private val positions = floatBuffer(*part.positions)
         private val normals = floatBuffer(*part.normals)
         private val texCoords = part.texCoords?.let { floatBuffer(*it) }
+        private val joints = part.joints?.let { floatBuffer(*it) }
+        private val weights = part.weights?.let { floatBuffer(*it) }
         private val indices: ShortBuffer = ByteBuffer.allocateDirect(part.indices.size * 2)
             .order(ByteOrder.nativeOrder()).asShortBuffer().apply { put(part.indices); position(0) }
         private val count = part.indices.size
@@ -476,13 +534,29 @@ internal class MeshRenderer {
             }
         }
 
-        fun draw() {
+        fun draw(jointMatrices: FloatArray?) {
             positions.position(0)
             GLES20.glVertexAttribPointer(oPosition, 3, GLES20.GL_FLOAT, false, 12, positions)
             GLES20.glEnableVertexAttribArray(oPosition)
             normals.position(0)
             GLES20.glVertexAttribPointer(oNormal, 3, GLES20.GL_FLOAT, false, 12, normals)
             GLES20.glEnableVertexAttribArray(oNormal)
+            if (jointMatrices != null && joints != null && weights != null) {
+                joints.position(0)
+                GLES20.glVertexAttribPointer(oJoints, 4, GLES20.GL_FLOAT, false, 16, joints)
+                GLES20.glEnableVertexAttribArray(oJoints)
+                weights.position(0)
+                GLES20.glVertexAttribPointer(oWeights, 4, GLES20.GL_FLOAT, false, 16, weights)
+                GLES20.glEnableVertexAttribArray(oWeights)
+                GLES20.glUniformMatrix4fv(oJointMatrices, jointMatrices.size / 16, false, jointMatrices, 0)
+                GLES20.glUniform1f(oSkinned, 1f)
+            } else {
+                GLES20.glDisableVertexAttribArray(oJoints)
+                GLES20.glDisableVertexAttribArray(oWeights)
+                GLES20.glVertexAttrib4f(oJoints, 0f, 0f, 0f, 0f)
+                GLES20.glVertexAttrib4f(oWeights, 1f, 0f, 0f, 0f)
+                GLES20.glUniform1f(oSkinned, 0f)
+            }
             val uv = texCoords
             if (textureId != 0 && uv != null) {
                 uv.position(0)
@@ -581,13 +655,27 @@ internal class MeshRenderer {
             attribute vec3 aPosition;
             attribute vec3 aNormal;
             attribute vec2 aTexCoord;
+            attribute vec4 aJoints;
+            attribute vec4 aWeights;
             uniform mat4 uMvp;
             uniform mat3 uNormalMatrix;
+            uniform mat4 uJoints[24];
+            uniform float uSkinned;
             varying vec3 vNormal;
             varying vec2 vTexCoord;
             void main() {
-                gl_Position = uMvp * vec4(aPosition, 1.0);
-                vNormal = uNormalMatrix * aNormal;
+                vec4 position = vec4(aPosition, 1.0);
+                vec3 normal = aNormal;
+                if (uSkinned > 0.5) {
+                    mat4 skin = aWeights.x * uJoints[int(aJoints.x + 0.5)]
+                        + aWeights.y * uJoints[int(aJoints.y + 0.5)]
+                        + aWeights.z * uJoints[int(aJoints.z + 0.5)]
+                        + aWeights.w * uJoints[int(aJoints.w + 0.5)];
+                    position = skin * position;
+                    normal = mat3(skin) * normal;
+                }
+                gl_Position = uMvp * position;
+                vNormal = uNormalMatrix * normal;
                 vTexCoord = aTexCoord;
             }
         """

@@ -12,6 +12,8 @@ import coil3.request.allowHardware
 import coil3.toBitmap
 import com.zinmedia.effects.FaceEffect
 import com.zinmedia.effects.R
+import com.zinmedia.effects.face.BeautyMesh
+import com.zinmedia.effects.face.parseBeautyMesh
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -39,6 +41,16 @@ public object FaceEffectLoader {
         } else {
             ActiveFaceEffect.Paint(mesh, loadImage(app, effect.imageUrl) ?: error("Gambar efek tidak bisa dimuat: ${effect.imageUrl}"))
         }
+    }
+
+    @Volatile
+    private var beautyMesh: BeautyMesh? = null
+
+    /** Siapkan data beauty (jaring warp & bobot masker) untuk [engine]; sekali baca dari resource. */
+    public suspend fun prepareBeauty(context: Context, engine: FaceEffectEngine) {
+        engine.beautyMesh = beautyMesh ?: withContext(Dispatchers.IO) {
+            parseBeautyMesh(context.applicationContext.resources.openRawResource(R.raw.zm_beauty_mesh).use { it.readBytes() })
+        }.also { beautyMesh = it }
     }
 
     /** Segitiga, UV, dan kepala standar jaring wajah (sekali baca dari resource library). */

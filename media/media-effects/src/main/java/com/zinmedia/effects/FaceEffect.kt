@@ -12,7 +12,9 @@ public const val DEFAULT_FACE_MODEL_URL: String =
  *   (`canonical_face_model.obj`): dibungkuskan ke permukaan wajah, seperti topeng, riasan, cat
  *   wajah, kumis; ikut berekspresi. Contoh: `tools/make_face_effects.py`.
  * - **Model 3D** (`.glb`, low-poly) di ruang kepala standar MediaPipe (cm; +Y atas, +Z depan):
- *   kacamata, topi, mahkota, telinga. Contoh penempatan aset: `tools/fit_face_props.py`.
+ *   kacamata, topi, mahkota, telinga. Bila berisi animation clip (termasuk armature/skin), clip
+ *   pertama otomatis diputar berulang tanpa konfigurasi tambahan. Maksimal 24 tulang aktif per
+ *   primitive dan empat pengaruh tulang per vertex. Contoh penempatan aset: `tools/fit_face_props.py`.
  *
  * @param imageUrl `file:///android_asset/…`, http/https, `content://`, `file://`, atau path berkas.
  *   Contoh siap pakai & templat: `tools/templat/` (panduan UV, kepala standar untuk Blender).

@@ -42,6 +42,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -172,7 +174,8 @@ internal fun CameraScreen(
 
             // Kanan: alat kamera.
             AnimatedVisibility(
-                visible = !state.isRecording && state.countdown == null,
+                // Panel Percantik memakai lebar penuh (slider); bilah alat disembunyikan selama terbuka.
+                visible = !state.isRecording && state.countdown == null && !state.showBeauty,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 24.dp, end = 8.dp),
@@ -226,6 +229,9 @@ internal fun CameraScreen(
             }
             AnimatedVisibility(visible = state.showFaceEffects && !state.isRecording) {
                 FaceEffectStrip(state)
+            }
+            AnimatedVisibility(visible = state.showBeauty && !state.isRecording) {
+                BeautyPanel(state)
             }
             AnimatedVisibility(visible = state.showSpeed && !state.isRecording && state.mode != CaptureMode.Photo) {
                 SpeedSelector(state)
@@ -285,8 +291,13 @@ private fun PreviewWithGestures(state: CameraState) {
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { offset ->
-                        currentState.session.focusAt(offset.x, offset.y)
-                        focusPoint = offset
+                        // Seperti TikTok: ketuk preview menutup panel Percantik, selain itu fokus.
+                        if (currentState.showBeauty) {
+                            currentState.showBeauty = false
+                        } else {
+                            currentState.session.focusAt(offset.x, offset.y)
+                            focusPoint = offset
+                        }
                     },
                     onDoubleTap = { currentState.flipCamera() },
                 )
@@ -413,6 +424,7 @@ private fun CameraToolbar(state: CameraState) {
                     if (state.showSpeed) {
                         state.showFilters = false
                         state.showFaceEffects = false
+                        state.showBeauty = false
                     }
                 },
             )
@@ -426,6 +438,7 @@ private fun CameraToolbar(state: CameraState) {
                 if (state.showFilters) {
                     state.showSpeed = false
                     state.showFaceEffects = false
+                    state.showBeauty = false
                 }
             },
         )
@@ -439,6 +452,7 @@ private fun CameraToolbar(state: CameraState) {
                     if (state.showFaceEffects) {
                         state.showFilters = false
                         state.showSpeed = false
+                        state.showBeauty = false
                     }
                 },
             )
@@ -446,8 +460,15 @@ private fun CameraToolbar(state: CameraState) {
         ToolButton(
             icon = R.drawable.zm_ic_camera_beauty,
             label = stringResource(R.string.zm_camera_beauty),
-            active = state.smoothing,
-            onClick = state::toggleSmoothing,
+            active = state.showBeauty || state.beauty.enabled,
+            onClick = {
+                state.showBeauty = !state.showBeauty
+                if (state.showBeauty) {
+                    state.showFilters = false
+                    state.showFaceEffects = false
+                    state.showSpeed = false
+                }
+            },
         )
         ToolButton(
             icon = R.drawable.zm_ic_camera_timer,
@@ -943,6 +964,10 @@ private const val TrayItemOutMs = 160
 
 /** Lama animasi tutup deretan untuk [count] foto (sampai foto terakhir selesai keluar). */
 private fun trayCloseDurationMs(count: Int): Long = (count - 1).coerceAtLeast(0) * TrayStaggerOutMs + TrayItemOutMs + 20
+
+/** Panel beauty face-aware: preset dinamis dari client dan kontrol individual real-time. */
+
+
 
 /** Pilihan efek wajah: "Tanpa" lalu efek dari aplikasi (gambar efeknya sebagai pratinjau). */
 @Composable

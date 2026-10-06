@@ -3,6 +3,7 @@ package com.zinmedia.effects.gl
 import android.content.Context
 import android.opengl.GLES20
 import com.pedro.encoder.input.gl.render.filters.BaseFilterRender
+import com.zinmedia.effects.BeautyParams
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -12,8 +13,7 @@ internal data class ColorParams(
     val matrix: FloatArray,
     val offset: FloatArray,
     val lut: CubeLut?,
-    /** 0 = mati, 1 = penghalus kulit penuh. */
-    val smoothing: Float,
+    val beauty: BeautyParams,
 )
 
 /**
@@ -27,7 +27,7 @@ internal data class ColorParams(
 internal class EffectsFilterRender : BaseFilterRender() {
 
     @Volatile
-    var params: ColorParams = ColorParams(IdentityMatrix, FloatArray(3), null, 0f)
+    var params: ColorParams = ColorParams(IdentityMatrix, FloatArray(3), null, BeautyParams.None)
 
     /**
      * Frame adalah gambar cermin: frame deteksi dibalik lagi agar MediaPipe melihat wajah asli
@@ -47,7 +47,7 @@ internal class EffectsFilterRender : BaseFilterRender() {
     private var uColorOffset = 0
     private var uLutSize = 0
     private var uLutMix = 0
-    private var uSmooth = 0
+    private var beautyUniforms: BeautyUniforms? = null
     private var uTexel = 0
     private var lutTexture = 0
     private var uploadedLut: CubeLut? = null
@@ -69,7 +69,7 @@ internal class EffectsFilterRender : BaseFilterRender() {
         uColorOffset = GLES20.glGetUniformLocation(program, "uColorOffset")
         uLutSize = GLES20.glGetUniformLocation(program, "uLutSize")
         uLutMix = GLES20.glGetUniformLocation(program, "uLutMix")
-        uSmooth = GLES20.glGetUniformLocation(program, "uSmooth")
+        beautyUniforms = BeautyUniforms(program)
         uTexel = GLES20.glGetUniformLocation(program, "uTexel")
         GLES20.glUseProgram(program)
         GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "sTexture"), 0)
@@ -121,7 +121,8 @@ internal class EffectsFilterRender : BaseFilterRender() {
         val lut = uploadedLut
         GLES20.glUniform1f(uLutSize, (lut?.size ?: 2).toFloat())
         GLES20.glUniform1f(uLutMix, if (lut != null) 1f else 0f)
-        GLES20.glUniform1f(uSmooth, current.smoothing)
+        // Beauty kulit & riasan: masker wajah frame yang ditahan (bentuk sudah di frame).
+        beautyUniforms?.upload(current.beauty, engine)
         GLES20.glUniform2f(uTexel, 1f / width, 1f / height)
         vertices.position(0)
         GLES20.glVertexAttribPointer(aPosition, 2, GLES20.GL_FLOAT, false, 16, vertices)
@@ -135,15 +136,19 @@ internal class EffectsFilterRender : BaseFilterRender() {
     override fun disableResources() {
         GLES20.glDisableVertexAttribArray(aPosition)
         GLES20.glDisableVertexAttribArray(aTexCoord)
-        // Titik frame deteksi -> frame ini; frame deteksi yang dibalik dibalik kembali.
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val affine = if (engine.heldFlipped) floatArrayOf(-w, 0f, 0f, h, w, 0f) else floatArrayOf(w, 0f, 0f, h, 0f, 0f)
-        engine.draw(affine, width, height, renderHandler.fboId[0])
+        beautyUniforms?.unbind()
+        engine.draw(faceAffine(), width, height, renderHandler.fboId[0])
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
+    }
+
+    /** Titik frame deteksi -> piksel frame ini; frame deteksi yang dibalik dibalik kembali. */
+    private fun faceAffine(): FloatArray {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        return if (engine.heldFlipped) floatArrayOf(-w, 0f, 0f, h, w, 0f) else floatArrayOf(w, 0f, 0f, h, 0f, 0f)
     }
 
     override fun release() {

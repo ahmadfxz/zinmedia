@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity() {
         val models = listOf("Kacamata Sport", "Kacamata Hitam", "Helm Pilot", "Helm Scifi", "Topi Nelayan", "Masker Gas")
         fun file(name: String) = name.lowercase().replace(' ', '_')
         CameraConfig.faceEffects = paint.map { FaceEffect(it, "file:///android_asset/face_mesh/${file(it)}.png") } +
+            listOf("Baling Baling Animasi", "Pita Tulang Animasi").map { FaceEffect(it, "file:///android_asset/face_3d/${file(it)}.glb") } +
             models.map {
                 FaceEffect(it, "file:///android_asset/face_3d/${file(it)}.glb", iconUrl = "file:///android_asset/face_3d/${file(it)}_ikon.png")
             }

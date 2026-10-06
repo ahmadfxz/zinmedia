@@ -3,7 +3,10 @@ package com.zinmedia.effects.gl
 import android.graphics.Bitmap
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
+import android.os.SystemClock
 import androidx.annotation.RestrictTo
+import com.zinmedia.effects.BeautyParams
+import com.zinmedia.effects.face.BeautyMesh
 import com.zinmedia.effects.face.FaceDetector
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -37,6 +40,30 @@ public class FaceEffectEngine(private val external: Boolean) {
     @Volatile
     public var detector: FaceDetector? = null
 
+    /** Lacak wajah walaupun tidak ada aksesori wajah, misalnya untuk beauty face-aware. */
+    @Volatile
+    public var trackingEnabled: Boolean = false
+        set(value) {
+            if (field != value) sync.reset()
+            field = value
+        }
+
+    /** Beauty (bentuk, kulit, riasan) pada wajah frame yang ditahan; butuh [trackingEnabled]. */
+    @Volatile
+    public var beauty: BeautyParams = BeautyParams.None
+
+    /** Jaring beauty (dimuat [FaceEffectLoader.prepareBeauty]); `null` = beauty belum siap. */
+    @Volatile
+    internal var beautyMesh: BeautyMesh? = null
+
+    private val beautyPass = BeautyPass()
+
+    /** Tekstur masker beauty (lihat [BeautyPass]); sah bila [masksReady]. */
+    public val maskTextures: IntArray get() = beautyPass.maskTextures
+
+    /** Masker beauty frame [heldFrame] siap dipakai shader filter. */
+    public val masksReady: Boolean get() = beautyPass.masksReady && heldFrame >= 0
+
     /** Efek yang digambar; ganti efek = hasil deteksi lama dibuang. */
     @Volatile
     public var effect: ActiveFaceEffect? = null
@@ -54,6 +81,7 @@ public class FaceEffectEngine(private val external: Boolean) {
     private var height = 0
     private val ringTextures = IntArray(MAX_DELAY + 1)
     private val ringFbos = IntArray(MAX_DELAY + 1)
+    private val ringTimestamps = LongArray(MAX_DELAY + 1)
 
     private var copyProgram = 0
     private var cPosition = 0
@@ -67,6 +95,7 @@ public class FaceEffectEngine(private val external: Boolean) {
     private var readBitmap: Bitmap? = null
 
     private var heldFaces: List<FloatArray> = emptyList()
+    private var heldTimestampMs = 0L
 
     /** Nomor frame terakhir yang masuk lewat [push] (−1 bila tanpa efek). */
     public var pushedFrame: Long = -1
@@ -95,6 +124,7 @@ public class FaceEffectEngine(private val external: Boolean) {
         GLES20.glUseProgram(copyProgram)
         GLES20.glUniform1i(GLES20.glGetUniformLocation(copyProgram, "sTexture"), 0)
         renderer.init()
+        beautyPass.init()
         // Cincin & frame baca dibuat saat dibutuhkan (ukuran sumber diketahui di push).
         ringTextures.fill(0)
         ringFbos.fill(0)
@@ -124,7 +154,7 @@ public class FaceEffectEngine(private val external: Boolean) {
         restoreHeight: Int,
     ): Int {
         val active = detector
-        if (active == null || effect == null || copyProgram == 0) {
+        if (active == null || (!trackingEnabled && effect == null) || copyProgram == 0) {
             if (syncing) {
                 syncing = false
                 sync.reset()
@@ -142,17 +172,29 @@ public class FaceEffectEngine(private val external: Boolean) {
         pushedFrame = frame
         sync.onFrame(frame)
         // Cincin: salinan apa adanya (koordinat tekstur sumber tidak berubah).
-        copy(source, ringFbos[(frame % ringFbos.size).toInt()], width, height, IDENTITY)
+        val ringIndex = (frame % ringFbos.size).toInt()
+        copy(source, ringFbos[ringIndex], width, height, IDENTITY)
+        ringTimestamps[ringIndex] = SystemClock.uptimeMillis()
         if (active.wantsFrame()) readFrame(active, source, detectMatrix, flipped, frame)
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, restoreFbo)
-        GLES20.glViewport(0, 0, restoreWidth, restoreHeight)
 
         val out = sync.outputFrame(frame)
         val result = sync.resultFor(out)
         heldFaces = result?.meshes.orEmpty()
         heldFlipped = result?.flipped ?: flipped
         heldFrame = out
-        return ringTextures[(out % ringTextures.size).toInt()]
+        val outIndex = (out % ringTextures.size).toInt()
+        heldTimestampMs = ringTimestamps[outIndex]
+        var held = ringTextures[outIndex]
+        // Beauty: warp & masker frame yang ditahan, sekali untuk semua keluaran.
+        val mesh = beautyMesh
+        if (mesh != null && trackingEnabled) {
+            held = beautyPass.apply(held, heldFaces, beauty, mesh, detectMatrix, detectAspect, width, height)
+        } else {
+            beautyPass.clear()
+        }
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, restoreFbo)
+        GLES20.glViewport(0, 0, restoreWidth, restoreHeight)
+        return held
     }
 
     /**
@@ -163,7 +205,7 @@ public class FaceEffectEngine(private val external: Boolean) {
     public fun draw(affine: FloatArray, width: Int, height: Int, targetFbo: Int) {
         val current = effect ?: return
         if (heldFrame < 0 || heldFaces.isEmpty()) return
-        renderer.draw(current, heldFaces, affine, width, height, targetFbo)
+        renderer.draw(current, heldFaces, affine, width, height, targetFbo, heldTimestampMs)
     }
 
     /** Titik wajah frame yang dideteksi (callback [FaceDetector]; tag dari [push]). */
@@ -175,6 +217,7 @@ public class FaceEffectEngine(private val external: Boolean) {
 
     public fun release() {
         renderer.release()
+        beautyPass.release()
         freeFrames()
         if (copyProgram != 0) GLES20.glDeleteProgram(copyProgram)
         copyProgram = 0
@@ -347,3 +390,4 @@ public class FaceEffectEngine(private val external: Boolean) {
 
 /** Keterangan frame deteksi: apakah dibalik dari sumber, dan nomor frame. */
 internal class DetectTag(val flipped: Boolean, val frame: Long)
+

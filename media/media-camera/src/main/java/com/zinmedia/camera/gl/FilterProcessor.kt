@@ -19,7 +19,9 @@ import androidx.camera.core.SurfaceOutput
 import androidx.camera.core.SurfaceProcessor
 import androidx.camera.core.SurfaceRequest
 import androidx.core.util.Consumer
+import com.zinmedia.effects.gl.BeautyUniforms
 import com.zinmedia.effects.gl.CubeLut
+import com.zinmedia.effects.BeautyParams
 import com.zinmedia.effects.gl.EffectShaders
 import com.zinmedia.effects.gl.FaceEffectEngine
 import java.nio.ByteBuffer
@@ -32,8 +34,7 @@ internal data class FilterParams(
     val matrix: FloatArray,
     val offset: FloatArray,
     val lut: CubeLut?,
-    /** 0 = mati, 1 = penghalus kulit penuh. */
-    val smoothing: Float,
+    val beauty: BeautyParams,
 )
 
 /** Efek CameraX: filter yang sama untuk preview dan rekaman video. */
@@ -70,7 +71,7 @@ internal class FilterProcessor : SurfaceProcessor {
         val uColorOffset = GLES20.glGetUniformLocation(program, "uColorOffset")
         val uLutSize = GLES20.glGetUniformLocation(program, "uLutSize")
         val uLutMix = GLES20.glGetUniformLocation(program, "uLutMix")
-        val uSmooth = GLES20.glGetUniformLocation(program, "uSmooth")
+        val beauty = BeautyUniforms(program)
         val uTexel = GLES20.glGetUniformLocation(program, "uTexel")
 
         init {
@@ -100,7 +101,9 @@ internal class FilterProcessor : SurfaceProcessor {
 
     @Volatile
     private var pending: FilterParams? = null
-    private var params = FilterParams(floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f), FloatArray(3), null, 0f)
+    private var params = FilterParams(
+        floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f), FloatArray(3), null, BeautyParams.None,
+    )
     private var uploadedLut: CubeLut? = null
     private var released = false
 
@@ -323,12 +326,13 @@ internal class FilterProcessor : SurfaceProcessor {
             EGL14.eglMakeCurrent(display, eglSurface, eglSurface, context)
             GLES20.glViewport(0, 0, output.size.width, output.size.height)
             output.updateTransformMatrix(outMatrix, frameMatrix)
-            draw(source, external)
-            uprightToSensor?.let { toSensor ->
+            val faceAffine = uprightToSensor?.let { toSensor ->
                 // Frame tegak (ternormalisasi) -> sensor -> buffer output (rotasi, crop, cermin ikut).
                 val toOutput = android.graphics.Matrix(toSensor).apply { postConcat(output.sensorToBufferTransform) }
-                faceEngine.draw(affine(toOutput), output.size.width, output.size.height, 0)
+                affine(toOutput)
             }
+            draw(source, external)
+            faceAffine?.let { faceEngine.draw(it, output.size.width, output.size.height, 0) }
             EGLExt.eglPresentationTimeANDROID(display, eglSurface, timestamp)
             EGL14.eglSwapBuffers(display, eglSurface)
         }
@@ -381,7 +385,8 @@ internal class FilterProcessor : SurfaceProcessor {
         val lut = uploadedLut
         GLES20.glUniform1f(p.uLutSize, (lut?.size ?: 2).toFloat())
         GLES20.glUniform1f(p.uLutMix, if (lut != null) 1f else 0f)
-        GLES20.glUniform1f(p.uSmooth, params.smoothing)
+        // Beauty kulit & riasan: masker wajah frame yang ditahan (bentuk sudah di frame).
+        p.beauty.upload(params.beauty, faceEngine)
         GLES20.glUniform2f(p.uTexel, 1f / inputWidth, 1f / inputHeight)
 
         vertices.position(0)
@@ -393,6 +398,7 @@ internal class FilterProcessor : SurfaceProcessor {
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         GLES20.glDisableVertexAttribArray(p.aPosition)
         GLES20.glDisableVertexAttribArray(p.aTexCoord)
+        p.beauty.unbind()
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)

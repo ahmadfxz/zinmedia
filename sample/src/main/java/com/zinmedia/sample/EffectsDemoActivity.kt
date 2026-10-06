@@ -110,7 +110,7 @@ class EffectsDemoActivity : ComponentActivity(), ConnectChecker {
         fun asset(folder: String, name: String, ext: String) =
             FaceEffect(name, "file:///android_asset/$folder/${name.lowercase().replace(' ', '_')}.$ext")
         val faceEffects = listOf("Cat Wajah", "Topeng", "Kucing", "Kumis", "Pipi Merah", "Badut", "Tengkorak", "Bintang").map { asset("face_mesh", it, "png") } +
-            listOf("Kacamata Sport", "Kacamata Hitam", "Helm Pilot", "Helm Scifi", "Topi Nelayan", "Masker Gas").map { asset("face_3d", it, "glb") }
+            listOf("Baling Baling Animasi", "Pita Tulang Animasi", "Kacamata Sport", "Kacamata Hitam", "Helm Pilot", "Helm Scifi", "Topi Nelayan", "Masker Gas").map { asset("face_3d", it, "glb") }
         val row2 = HorizontalScrollView(this).apply {
             addView(LinearLayout(this@EffectsDemoActivity).apply {
                 fun choose(effect: FaceEffect?) {

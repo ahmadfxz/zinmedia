@@ -17,6 +17,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.doOnLayout
 import androidx.lifecycle.LifecycleOwner
 import com.zinmedia.camera.face.FaceEffectRunner
+import com.zinmedia.effects.BeautyParams
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -41,7 +42,7 @@ public class LiveCameraHost(context: Context, lifecycleOwner: LifecycleOwner) {
     private val faceRunner = FaceEffectRunner(context, session)
     private val filters = cameraFilters()
     private var filterIndex = 0
-    private var smoothing = 0f
+    private var beauty = BeautyParams.None
     private var started = false
 
     /** Nama filter yang tersedia (indeks 0 = tanpa filter), untuk [setFilter]. */
@@ -112,13 +113,19 @@ public class LiveCameraHost(context: Context, lifecycleOwner: LifecycleOwner) {
     /** Filter berdasarkan indeks [filterNames] (0 = tanpa filter). */
     public suspend fun setFilter(index: Int) {
         filterIndex = index.coerceIn(0, filters.lastIndex)
-        session.applyFilter(filters[filterIndex], smoothing)
+        session.applyFilter(filters[filterIndex], beauty)
     }
 
-    /** Penghalus kulit 0 (mati)..1. */
+    /** Beauty face-aware; model landmark disiapkan otomatis ketika pertama kali diaktifkan. */
+    public suspend fun setBeauty(params: BeautyParams) {
+        beauty = params
+        session.applyFilter(filters[filterIndex], beauty)
+        faceRunner.setBeautyTracking(beauty.needsFace)
+    }
+
+    /** Penghalus kulit 0 (mati)..1; kompatibilitas API lama. */
     public suspend fun setSmoothing(strength: Float) {
-        smoothing = strength.coerceIn(0f, 1f)
-        session.applyFilter(filters[filterIndex], smoothing)
+        setBeauty(beauty.with(com.zinmedia.effects.BeautyFeature.Smooth, strength))
     }
 
     /** Unduh model wajah lebih awal, agar efek pertama tampil tanpa menunggu. */

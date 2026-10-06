@@ -12,6 +12,8 @@ import com.zinmedia.effects.face.ensureFaceModel
 import com.zinmedia.effects.gl.FaceEffectLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Memasang/melepas satu efek wajah pada [session]: unduh model deteksi sekali, muat efek, lalu
@@ -25,9 +27,10 @@ internal class FaceEffectRunner(private val context: Context, private val sessio
         private set
 
     private var detector: FaceDetector? = null
+    private val prepareLock = Mutex()
 
     /** Siapkan pendeteksi (model diunduh sekali lalu disimpan) tanpa memasang efek. */
-    suspend fun prepare(): FaceDetector {
+    suspend fun prepare(): FaceDetector = prepareLock.withLock {
         detector?.let { return it }
         try {
             modelProgress = 0f
@@ -49,18 +52,33 @@ internal class FaceEffectRunner(private val context: Context, private val sessio
         val active = prepare()
         val ready = FaceEffectLoader.load(context, effect)
         session.faceEngine.effect = ready
-        active.enabled = true
-        session.faceEngine.detector = active
+        updateDetector(active)
+    }
+
+    /** Aktifkan pelacakan landmark untuk beauty walaupun aksesori wajah tidak dipasang. */
+    suspend fun setBeautyTracking(enabled: Boolean) {
+        if (enabled) FaceEffectLoader.prepareBeauty(context, session.faceEngine)
+        session.faceEngine.trackingEnabled = enabled
+        val active = if (enabled) prepare() else detector
+        updateDetector(active)
     }
 
     fun clear() {
-        detector?.enabled = false
-        session.faceEngine.detector = null
         session.faceEngine.effect = null
+        updateDetector()
+    }
+
+    private fun updateDetector(active: FaceDetector? = detector) {
+        val needed = session.faceEngine.trackingEnabled || session.faceEngine.effect != null
+        active?.enabled = needed
+        session.faceEngine.detector = active?.takeIf { needed }
     }
 
     fun close() {
-        clear()
+        session.faceEngine.trackingEnabled = false
+        session.faceEngine.effect = null
+        detector?.enabled = false
+        session.faceEngine.detector = null
         detector?.close()
         detector = null
     }

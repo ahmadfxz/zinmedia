@@ -13,6 +13,10 @@ package com.zinmedia.camera
  */
 public object CameraConfig {
 
+    /** Preset beauty pada panel kamera; dapat diganti dari respons backend sebelum kamera dibuka. */
+    @Volatile
+    public var beautyPresets: List<BeautyPreset> = com.zinmedia.effects.DefaultBeautyPresets
+
     /**
      * Efek wajah: gambar peta UV (.png) atau model 3D (.glb), otomatis pas di wajah siapa pun.
      * Kosong = tombol Efek disembunyikan.
@@ -40,3 +44,6 @@ public object CameraConfig {
 
 /** Efek wajah (gambar peta UV atau model 3D .glb); lihat [com.zinmedia.effects.FaceEffect]. */
 public typealias FaceEffect = com.zinmedia.effects.FaceEffect
+
+/** Preset beauty dinamis; lihat [com.zinmedia.effects.BeautyPreset]. */
+public typealias BeautyPreset = com.zinmedia.effects.BeautyPreset

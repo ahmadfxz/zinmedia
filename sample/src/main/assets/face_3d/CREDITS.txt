@@ -1,4 +1,7 @@
 Model 3D efek wajah. CC-BY: wajib mencantumkan nama pembuat di aplikasi.
+
+baling_baling_animasi.glb: dibuat untuk Zinmedia, CC0-1.0.
+pita_tulang_animasi.glb: dibuat untuk Zinmedia, CC0-1.0.
 kacamata_sport.glb: Apache-2.0, The MediaPipe Authors, https://github.com/google-ai-edge/mediapipe/tree/master/mediapipe/graphs/face_effect/data
 kacamata_hitam.glb: CC-BY-4.0, Eric Chadwick, Darmstadt Graphics Group GmbH, https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/SunglassesKhronos
 helm_pilot.glb: CC0-1.0, Gary Hsu, https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/FlightHelmet

@@ -10,12 +10,16 @@ import com.zinmedia.effects.gl.EffectsFilterRender
 import com.zinmedia.effects.gl.FaceEffectLoader
 import com.zinmedia.effects.gl.loadCubeLut
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 /**
  * Efek kamera untuk siaran RootEncoder: filter warna (termasuk LUT), penghalus kulit, dan satu efek
@@ -51,7 +55,8 @@ public class ZinEffects(
     private val render = EffectsFilterRender()
     private val filters = effectFilters(lutFilters)
     private var filterIndex = 0
-    private var smoothing = 0f
+    private var beauty = BeautyParams.None
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val prepareLock = Mutex()
     private var detector: FaceDetector? = null
     private var released = false
@@ -92,7 +97,7 @@ public class ZinEffects(
         val lut = filter.lutUrl?.let { loadCubeLut(it) }
         // Pilihan lain datang selama LUT diunduh: biarkan yang terbaru.
         if (filterIndex != chosen) return
-        render.params = ColorParams(filter.matrix, filter.offset, lut, smoothing)
+        render.params = ColorParams(filter.matrix, filter.offset, lut, beauty)
     }
 
     /**
@@ -110,10 +115,44 @@ public class ZinEffects(
         }
     }
 
-    /** Penghalus kulit 0 (mati)..1. */
+    /**
+     * Beauty (bentuk wajah, kulit, riasan; lihat [BeautyFeature]) yang mengikuti wajah. Bisa diubah
+     * kapan saja, termasuk saat live, dan digabung dengan filter & efek wajah. Model deteksi wajah
+     * disiapkan otomatis saat pertama kali dipakai.
+     */
+    public fun setBeauty(params: BeautyParams) {
+        beauty = params
+        render.params = render.params.copy(beauty = params)
+        render.engine.beauty = params
+        render.engine.trackingEnabled = params.needsFace
+        updateDetector()
+        // Slider digeser = banyak panggilan; model cukup disiapkan sekali.
+        if (params.needsFace && !released && (render.engine.beautyMesh == null || render.engine.detector == null)) {
+            scope.launch {
+                try {
+                    FaceEffectLoader.prepareBeauty(context, render.engine)
+                    prepare()
+                    updateDetector()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Frame tetap normal bila model tidak tersedia; panggilan berikut mencoba lagi.
+                }
+            }
+        }
+    }
+
+    /** Beauty saat ini. */
+    public val currentBeauty: BeautyParams get() = beauty
+
+    /** Matikan seluruh beauty. */
+    public fun clearBeauty() {
+        setBeauty(BeautyParams.None)
+    }
+
+    /** Penghalus kulit 0 (mati)..1 (= [BeautyFeature.Smooth]). */
     public fun setSmoothing(strength: Float) {
-        smoothing = strength.coerceIn(0f, 1f)
-        render.params = render.params.copy(smoothing = smoothing)
+        setBeauty(beauty.with(BeautyFeature.Smooth, strength))
     }
 
     /** Unduh & siapkan model wajah lebih awal, agar efek pertama tampil tanpa menunggu. */
@@ -128,26 +167,31 @@ public class ZinEffects(
     public suspend fun setFaceEffect(effect: FaceEffect?) {
         val engine = render.engine
         if (effect == null) {
-            detector?.enabled = false
-            engine.detector = null
             engine.effect = null
+            updateDetector()
             return
         }
         val active = prepare()
         val ready = FaceEffectLoader.load(context, effect)
         check(!released) { "ZinEffects sudah dilepas" }
         engine.effect = ready
-        active.enabled = true
-        engine.detector = active
+        updateDetector(active)
     }
 
     /** Lepas efek wajah & model. [filterRender] tetap bisa dilepas dari stream oleh aplikasi. */
     public fun release() {
         released = true
+        scope.cancel()
         render.engine.detector = null
         render.engine.effect = null
         detector?.close()
         detector = null
+    }
+
+    private fun updateDetector(active: FaceDetector? = detector) {
+        val needed = beauty.needsFace || render.engine.effect != null
+        active?.enabled = needed
+        render.engine.detector = active?.takeIf { needed }
     }
 
     private suspend fun prepare(): FaceDetector = prepareLock.withLock {

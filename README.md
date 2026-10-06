@@ -33,7 +33,7 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "5.0.0"
+zinmedia = "5.1.0"
 
 [libraries]
 zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }
@@ -261,7 +261,7 @@ Urutan hasil sama dengan urutan media. Media yang tidak diedit dikembalikan deng
 - **Rekam bersegmen**: ketuk rana untuk mulai/berhenti, atau tahan selama merekam (geser jari ke atas saat menahan untuk zoom). Progress bar menandai tiap klip; klip terakhir bisa dihapus. Pilihan mode: 15d, 1m (default), 30d, atau Foto.
 - **Kecepatan** 0.3x, 0.5x, 1x, 2x, 3x per klip. Klip digabung (dan kecepatannya diterapkan) saat menekan Selesai.
 - **Filter real-time** (GPU) yang terlihat di preview dan ikut terekam: filter bawaan plus filter LUT `.cube` dari `MediaComposer.configure(videoFilters = …)`. Geser kiri/kanan di preview untuk ganti filter.
-- **Halus**: penghalus kulit sederhana.
+- **Percantik ala TikTok**: tab Preset (12 bawaan, thumbnail otomatis), Kulit, Wajah, Mata, Hidung, Mulut, dan Riasan dengan 25 fitur dari katalog `BeautyFeature` (halus, cerah, lingkar mata, tirus, V-line, mata besar, hidung, dagu, senyum, gigi putih, lipstik dengan pilihan warna, perona, kontur, dll.). Semua mengikuti wajah (MediaPipe) dan ikut terekam.
 - **Kontrol kamera**: balik depan/belakang (juga ketuk 2× di preview), flash (senter di kamera belakang, layar putih di kamera depan), cubit untuk zoom, ketuk untuk fokus, timer 3/10 detik, grid.
 - **Foto beruntun**: di mode Foto, tiap jepretan ditampung dulu sampai batas `maxItems`. Foto tampil sebagai tumpukan kartu miring (menggantikan tombol galeri) dengan jumlahnya; ketuk tumpukan untuk membuka deretan foto (hapus dengan ×, jumlah mis. `2/5`). Tombol Selesai membuka semuanya di editor; saat batas tercapai editor terbuka otomatis. Dengan `maxItems = 1`, foto langsung dibuka di editor.
 - **Galeri**: pilih hingga `maxItems` foto/video sekaligus (default 5).
@@ -277,6 +277,29 @@ CameraConfig.faceEffects = listOf(
     // Model 3D (.glb) di ruang kepala standar: kacamata, topi, helm, masker; ikon untuk daftar efek.
     FaceEffect("Helm", "https://cdn.contoh.com/efek/helm.glb", iconUrl = "https://cdn.contoh.com/efek/helm.png"),
 )
+
+// Daftar preset pada panel Percantik dapat berasal dari API/remote config.
+CameraConfig.beautyPresets = listOf(
+    BeautyPreset(
+        id = "natural",
+        name = "Natural",
+        iconUrl = "https://cdn.contoh.com/beauty/natural.webp",  // opsional; tanpa ini thumbnail digambar otomatis
+        params = BeautyParams.fromMap(mapOf("smooth" to 0.4, "brighten" to 0.12, "lipstick" to 0.3), lipColor = 0xFFE53935.toInt()),
+    ),
+) + DefaultBeautyPresets
+```
+
+Beauty untuk aplikasi sendiri (kamera live, dsb.):
+
+```kotlin
+// Satu angka per fitur; kunci = BeautyFeature.id, sehingga mudah disimpan / dikirim backend.
+val beauty = BeautyParams.of(BeautyFeature.Smooth to 0.5f, BeautyFeature.Lipstick to 0.4f)
+    .withLipColor(0xFFE53935.toInt())
+effects.setBeauty(beauty.with(BeautyFeature.EnlargeEyes, 0.2f))
+val json = beauty.toMap()                       // {"smooth":0.5,"lipstick":0.4}
+// UI: BeautyGroup.entries -> tab, BeautyFeature.entries.filter { it.group == tab } -> item,
+// slider sesuai feature.range (bipolar = −1..1). Thumbnail preset tanpa aset:
+val bitmap = BeautyThumbnails.draw(preset.params, sizePx = 160)
 ```
 
 - Membuat efek: lihat [Efek siaran RootEncoder](#efek-siaran-rootencoder-media-effects) (panduan UV & templat kepala di `tools/templat/`). Contoh siap pakai: `sample/src/main/assets/face_mesh/` dan `face_3d/` (lisensi di `CREDITS.txt`).
@@ -328,7 +351,7 @@ scope.launch {
 | `start(publishUrl)`, `stop()`, `clearError()` | Siaran; status lewat `state: StateFlow<LiveState>` |
 | `setMicMuted(Boolean)` | Mikrofon |
 | `flipCamera()`, `setTorch(Boolean)`, `setZoom(Float)` | Kamera (`isFrontCamera`, `hasFlash`, `zoomRatio`, `minZoom`, `maxZoom`) |
-| `filterNames`, `setFilter(index)`, `setSmoothing(0..1)` | Filter (termasuk LUT dari konfigurasi) & penghalus |
+| `filterNames`, `setFilter(index)`, `setBeauty(params)`, `setSmoothing(0..1)` | Filter dan beauty face-aware; `setSmoothing` tetap tersedia untuk kompatibilitas |
 | `prepareFaceEffects()`, `setFaceEffect(effect?)` | Efek wajah: satu per waktu, menggantikan yang lama; `null` = lepas. `prepareFaceEffects()` mengunduh model lebih awal |
 | `release()` | Wajib saat layar ditutup |
 
@@ -354,6 +377,7 @@ effects.mirrored = camera.getCameraFacing() == CameraHelper.Facing.FRONT
 
 scope.launch { effects.setFilter(2) }        // indeks dari effects.filterNames (0 = Normal)
 effects.setSmoothing(0.6f)                     // penghalus kulit 0..1
+effects.setBeauty(BeautyParams.of(BeautyFeature.Smooth to 0.5f, BeautyFeature.SlimFace to 0.1f))
 scope.launch { effects.setFaceEffect(FaceEffect("Topeng", "file:///android_asset/face_mesh/topeng.png")) }  // null = lepas
 
 effects.release()                              // saat layar/stream selesai
@@ -365,14 +389,15 @@ effects.release()                              // saat layar/stream selesai
 | `filterRender` | Filter untuk `GlStreamInterface.addFilter(...)` |
 | `filterNames`, `filterSwatches`, `setFilter(index)` | Daftar filter (nama + warna contoh) & pilihannya; bisa diganti kapan saja, termasuk saat live |
 | `filterPreview(index, bitmap)` | Salinan `bitmap` dengan filter itu, untuk thumbnail daftar filter (mis. dari satu foto contoh) |
-| `setSmoothing(0..1)` | Penghalus kulit |
+| `setBeauty(params)`, `clearBeauty()` | Retouch dan bentuk wajah face-aware; model landmark disiapkan otomatis |
+| `setSmoothing(0..1)` | Kompatibilitas API lama; mengubah nilai `smooth` pada beauty |
 | `prepareFaceEffects()`, `setFaceEffect(effect?)`, `faceModelProgress` | Efek wajah `FaceEffect(nama, gambar)` (satu per waktu). Model MediaPipe diunduh sekali lalu disimpan |
 | `mirrored` | `true` bila frame stream adalah gambar cermin, agar sisi kiri/kanan efek tetap di sisi orangnya |
 | `release()` | Lepas model & efek |
 
-- **Efek wajah**: `FaceEffect(nama, berkas, iconUrl?)`. Berkas `.png` = gambar di peta UV wajah standar MediaPipe, dibungkuskan ke 468 titik wajah (topeng, riasan, cat wajah, kumis). Berkas `.glb` = model 3D di ruang kepala standar MediaPipe (cm), dipasang dengan pose kepala dari jaring wajah (kacamata, topi, helm, masker); bagian di balik wajah/kepala tertutup, tekstur warna didukung. Keduanya otomatis pas di wajah siapa pun tanpa pengaturan. Contoh: `sample/src/main/assets/face_mesh/` (cat wajah resmi MediaPipe + `tools/make_face_effects.py`) dan `face_3d/` (`tools/fit_face_props.py`); lisensi di `CREDITS.txt`.
+- **Efek wajah**: `FaceEffect(nama, berkas, iconUrl?)`. Berkas `.png` = gambar di peta UV wajah standar MediaPipe, dibungkuskan ke 468 titik wajah (topeng, riasan, cat wajah, kumis). Berkas `.glb` = model 3D di ruang kepala standar MediaPipe (cm), dipasang dengan pose kepala dari jaring wajah (kacamata, topi, helm, masker); bagian di balik wajah/kepala tertutup, tekstur warna didukung. Bila GLB memiliki animation clip, clip pertama otomatis diputar berulang (`translation`, `rotation`, dan `scale` dengan interpolasi `LINEAR`/`STEP`), termasuk animasi armature/skin, sehingga aset animasi baru tidak memerlukan konfigurasi aplikasi. Keduanya otomatis pas di wajah siapa pun tanpa pengaturan. Contoh: `sample/src/main/assets/face_mesh/` (cat wajah resmi MediaPipe + `tools/make_face_effects.py`) dan `face_3d/` (`tools/fit_face_props.py`); lisensi di `CREDITS.txt`.
 - **Membuat efek gambar (UV)**: lukis di atas `tools/templat/panduan_uv.png` (1024×1024: jaring wajah + garis mata, alis, hidung, bibir, oval wajah) di lapisan baru, sembunyikan panduannya, lalu ekspor PNG transparan 1024×1024. Atau lukis langsung di wajah 3D dengan Texture Paint Blender pada `kepala_standar.glb`. Area di luar oval wajah tidak tampil. Panduan dibuat ulang dengan `tools/export_uv_guide.py`.
-- **Efek 3D tanpa konfigurasi (Blender dkk.)**: import `tools/templat/kepala_standar.glb` (File > Import > glTF 2.0), modelkan aset di kepala standar itu (1 unit = 1 cm; +Y atas, +Z depan), **hapus kedua objek `TEMPLAT_…`**, lalu ekspor `.glb`. Hasilnya langsung dipakai: `FaceEffect("Nama", "…/nama.glb")`. Wajah templat memakai tekstur kisi UV resmi MediaPipe, sekaligus panduan peta UV untuk efek gambar. Aset dari luar (ukuran/arah sembarang) ditempatkan sekali dengan `tools/fit_face_props.py`; templat dibuat ulang dengan `tools/export_head_template.py`.
+- **Efek 3D tanpa konfigurasi (Blender dkk.)**: import `tools/templat/kepala_standar.glb` (File > Import > glTF 2.0), modelkan aset di kepala standar itu (1 unit = 1 cm; +Y atas, +Z depan), **hapus kedua objek `TEMPLAT_…`**, lalu ekspor `.glb`. Hasilnya langsung dipakai: `FaceEffect("Nama", "…/nama.glb")`. Untuk animasi, buat keyframe transform object atau armature di Blender dan pastikan action yang ingin dimainkan menjadi clip pertama saat ekspor; Zinmedia menjalankannya otomatis dan loop. Skin memakai `JOINTS_0`/`WEIGHTS_0`, maksimal empat pengaruh per vertex dan 24 tulang aktif per primitive. Shape key/morph target dan interpolasi `CUBICSPLINE` belum didukung. Wajah templat memakai tekstur kisi UV resmi MediaPipe, sekaligus panduan peta UV untuk efek gambar. Aset dari luar (ukuran/arah sembarang) ditempatkan sekali dengan `tools/fit_face_props.py`; templat dibuat ulang dengan `tools/export_head_template.py`.
 - **Sinkron frame**: dengan efek wajah aktif, video ditahan beberapa frame (±0,1–0,2 detik) sampai posisi wajah frame itu siap, sehingga efek menempel dan tidak tertinggal saat kepala bergerak (seperti TikTok). Audio tidak ikut ditahan.
 - RootEncoder **tidak** dibawa modul ini: aplikasi menyertakan `com.github.pedroSG94.RootEncoder:library` sendiri (diuji dengan 2.8.1).
 - Aturan R8 untuk MediaPipe sudah disertakan (aman untuk build release yang di-minify).

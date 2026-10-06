@@ -1,6 +1,8 @@
 package com.zinmedia.camera
 
 import com.zinmedia.camera.face.FaceEffectRunner
+import com.zinmedia.effects.BeautyFeature
+import com.zinmedia.effects.BeautyParams
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
@@ -34,8 +36,6 @@ internal enum class CaptureMode(val maxMs: Long) {
 internal val Speeds = listOf(0.3f, 0.5f, 1f, 2f, 3f)
 internal val TimerOptions = listOf(0, 3, 10)
 
-/** Kekuatan penghalus kulit saat aktif. */
-private const val SmoothingStrength = 0.6f
 
 /** Segmen lebih pendek dari ini dianggap ketukan tak sengaja dan dibuang. */
 private const val MinSegmentMs = 300L
@@ -68,7 +68,10 @@ internal class CameraState(
         private set
     var filterIndex by mutableIntStateOf(0)
         private set
-    var smoothing by mutableStateOf(false)
+    var beauty by mutableStateOf(BeautyParams.None)
+        private set
+    val beautyPresets = CameraConfig.beautyPresets
+    var beautyPresetIndex by mutableIntStateOf(-1)
         private set
     var speed by mutableFloatStateOf(1f)
     var timerSeconds by mutableIntStateOf(0)
@@ -80,6 +83,7 @@ internal class CameraState(
     var showSpeed by mutableStateOf(false)
     var showFilters by mutableStateOf(false)
     var showFaceEffects by mutableStateOf(false)
+    var showBeauty by mutableStateOf(false)
 
     /** Efek wajah dari aplikasi ([CameraConfig.faceEffects]). */
     val faceEffects: List<FaceEffect> = CameraConfig.faceEffects
@@ -90,6 +94,8 @@ internal class CameraState(
     /** Progres unduh model wajah (0..1), `null` bila tidak sedang menyiapkan. */
     val faceEffectLoading: Float? get() = faceRunner.modelProgress
     private var faceJob: Job? = null
+    private var beautyTrackingJob: Job? = null
+    private var beautyTracking = false
 
     val segments = mutableStateListOf<Segment>()
     /** Foto yang sudah diambil (mode Foto, bila [maxPhotos] > 1). */
@@ -151,9 +157,44 @@ internal class CameraState(
         applyFilter()
     }
 
-    fun toggleSmoothing() {
-        smoothing = !smoothing
+    fun selectBeautyPreset(index: Int) {
+        beautyPresetIndex = index.takeIf { it in beautyPresets.indices } ?: -1
+        beauty = beautyPresetIndex.takeIf { it >= 0 }?.let { beautyPresets[it].params } ?: BeautyParams.None
+        applyBeauty()
+    }
+
+    fun setBeauty(feature: BeautyFeature, value: Float) {
+        beautyPresetIndex = -1
+        beauty = beauty.with(feature, value)
+        applyBeauty()
+    }
+
+    fun setLipColor(color: Int) {
+        beautyPresetIndex = -1
+        beauty = beauty.withLipColor(color)
+        applyBeauty()
+    }
+
+    fun resetBeauty() {
+        beautyPresetIndex = -1
+        beauty = BeautyParams.None
+        applyBeauty()
+    }
+
+    private fun applyBeauty() {
         applyFilter()
+        if (beautyTracking == beauty.needsFace) return
+        beautyTracking = beauty.needsFace
+        beautyTrackingJob?.cancel()
+        beautyTrackingJob = scope.launch {
+            try {
+                faceRunner.setBeautyTracking(beautyTracking)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Model beauty gagal disiapkan", e)
+            }
+        }
     }
 
     fun cycleTimer() {
@@ -177,8 +218,7 @@ internal class CameraState(
 
     private fun applyFilter() {
         val selected = filter
-        val strength = if (smoothing) SmoothingStrength else 0f
-        scope.launch { session.applyFilter(selected, strength) }
+        scope.launch { session.applyFilter(selected, beauty) }
     }
 
     // ---- rana ----
@@ -380,6 +420,7 @@ internal class CameraState(
 
     fun release() {
         faceJob?.cancel()
+        beautyTrackingJob?.cancel()
         faceRunner.close()
         cancelCountdown()
         recording?.stop()
