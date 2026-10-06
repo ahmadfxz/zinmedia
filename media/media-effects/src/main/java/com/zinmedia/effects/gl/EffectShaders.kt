@@ -70,6 +70,18 @@ public object EffectShaders {
             return mix(c0, c1, blue - b0);
         }
 
+        // Bibir dengan tepi lembut: rata-rata masker di sekitar piksel, sedikit menyusut ke dalam
+        // (garis bibir dari jaring wajah cenderung sedikit di luar bibir asli).
+        float lipMask(float center) {
+            vec2 r = uTexel * 4.0;
+            float sum = center
+                + texture2D(sMask0, vTexCoord + vec2(r.x, 0.0)).a + texture2D(sMask0, vTexCoord - vec2(r.x, 0.0)).a
+                + texture2D(sMask0, vTexCoord + vec2(0.0, r.y)).a + texture2D(sMask0, vTexCoord - vec2(0.0, r.y)).a
+                + texture2D(sMask0, vTexCoord + r * 0.7).a + texture2D(sMask0, vTexCoord - r * 0.7).a
+                + texture2D(sMask0, vTexCoord + vec2(r.x, -r.y) * 0.7).a + texture2D(sMask0, vTexCoord - vec2(r.x, -r.y) * 0.7).a;
+            return smoothstep(0.3, 0.95, sum / 9.0);
+        }
+
         float luma(vec3 c) {
             return dot(c, vec3(0.299, 0.587, 0.114));
         }
@@ -117,7 +129,7 @@ public object EffectShaders {
                 float under = m0.g;
                 float smile = m0.b;
                 float teeth = m1.r;
-                float lips = m0.a;
+                float lips = uMakeup.x > 0.0 ? lipMask(m0.a) : 0.0;
                 float eyes = m1.g;
                 float cheeks = m1.b;
                 float highlight = m1.a;
@@ -136,9 +148,11 @@ public object EffectShaders {
                 c = mix(c, vec3(luma(c) * 1.1 + 0.05), teeth * uAreas.z * bright * 0.75);
                 // Mata cerah: putih mata & iris lebih terang dan kontras.
                 c = mix(c, clamp((c - 0.5) * 1.18 + 0.56, 0.0, 1.0), eyes * uAreas.w * 0.7);
-                // Lipstik: warna bibir, terang-gelap bibir asli dipertahankan.
-                vec3 lip = uLipColor * (luma(c) / max(luma(uLipColor), 0.05));
-                c = mix(c, clamp(lip, 0.0, 1.0), lips * uMakeup.x * 0.75);
+                // Lipstik: rona & kepekatan dari warna lipstik; kecerahan ikut terang-gelap bibir
+                // asli (diredam, agar tekstur tetap ada tanpa membuat warna gelap jadi menyala).
+                float gain = pow(luma(c) / max(luma(uLipColor), 0.05), 0.6);
+                vec3 lip = clamp(uLipColor * gain, 0.0, 1.0);
+                c = mix(c, lip, lips * uMakeup.x * 0.85);
                 // Perona: merah muda lembut di apel pipi.
                 c = mix(c, c * vec3(1.0, 0.86, 0.88) + vec3(0.07, 0.0, 0.02), cheeks * uMakeup.y * 0.7);
                 // Kontur & highlight.
