@@ -3,6 +3,7 @@ package com.zinmedia.camera
 import com.zinmedia.camera.face.FaceEffectRunner
 import com.zinmedia.effects.BeautyFeature
 import com.zinmedia.effects.BeautyParams
+import com.zinmedia.effects.LipFinish
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
@@ -172,6 +173,12 @@ internal class CameraState(
     fun setLipColor(color: Int) {
         beautyPresetIndex = -1
         beauty = beauty.withLipColor(color)
+        applyBeauty()
+    }
+
+    fun setLipFinish(finish: LipFinish) {
+        beautyPresetIndex = -1
+        beauty = beauty.withLipFinish(finish)
         applyBeauty()
     }
 

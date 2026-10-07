@@ -59,6 +59,7 @@ import com.zinmedia.camera.CameraState
 import com.zinmedia.effects.BeautyFeature
 import com.zinmedia.effects.BeautyGroup
 import com.zinmedia.effects.BeautyThumbnails
+import com.zinmedia.effects.LipFinish
 import com.zinmedia.videoeditor.VideoEditorConfig
 import kotlin.math.roundToInt
 
@@ -91,6 +92,8 @@ internal fun BeautyPanel(state: CameraState) {
         // Slider melayang di atas panel (hanya saat sebuah fitur dipilih).
         if (feature != null) {
             if (feature == BeautyFeature.Lipstick) {
+                LipFinishRow(selected = state.beauty.lipFinish, onSelect = state::setLipFinish)
+                Spacer(Modifier.height(10.dp))
                 LipColorRow(selected = state.beauty.lipColor, onSelect = state::setLipColor)
                 Spacer(Modifier.height(10.dp))
             }
@@ -252,6 +255,29 @@ private fun ItemButton(
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
+    }
+}
+
+@Composable
+private fun LipFinishRow(selected: LipFinish, onSelect: (LipFinish) -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        LipFinish.entries.forEach { finish ->
+            val isSelected = finish == selected
+            Text(
+                finish.label,
+                color = if (isSelected) Color.Black else Color.White,
+                fontSize = 12.sp,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(if (isSelected) Color.White else Color.Black.copy(alpha = 0.45f))
+                    .clickable(role = Role.Button) { onSelect(finish) }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+            )
+        }
     }
 }
 

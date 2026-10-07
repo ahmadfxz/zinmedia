@@ -5,6 +5,7 @@ import android.opengl.GLES20
 import androidx.annotation.RestrictTo
 import com.zinmedia.effects.BeautyFeature
 import com.zinmedia.effects.BeautyParams
+import com.zinmedia.effects.LipFinish
 
 /**
  * Lokasi & pengunggah uniform beauty pada program filter ([EffectShaders.filterFragment]); dipakai
@@ -16,6 +17,7 @@ public class BeautyUniforms(program: Int) {
     private val areas = GLES20.glGetUniformLocation(program, "uAreas")
     private val makeup = GLES20.glGetUniformLocation(program, "uMakeup")
     private val lipColor = GLES20.glGetUniformLocation(program, "uLipColor")
+    private val lipFinish = GLES20.glGetUniformLocation(program, "uLipFinish")
 
     init {
         GLES20.glUseProgram(program)
@@ -43,6 +45,10 @@ public class BeautyUniforms(program: Int) {
             params[BeautyFeature.Lipstick], params[BeautyFeature.Blush], params[BeautyFeature.Contour], if (ready) 1f else 0f,
         )
         GLES20.glUniform3f(lipColor, Color.red(params.lipColor) / 255f, Color.green(params.lipColor) / 255f, Color.blue(params.lipColor) / 255f)
+        GLES20.glUniform2f(
+            lipFinish,
+            if (params.lipFinish == LipFinish.Matte) 1f else 0f, if (params.lipFinish == LipFinish.Gloss) 1f else 0f,
+        )
         val textures = engine.maskTextures
         for (k in 0 until BeautyPass.MASKS) {
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0 + FIRST_UNIT + k)

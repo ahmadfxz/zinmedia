@@ -181,7 +181,13 @@ public object BeautyThumbnails {
             quadTo(cx, my + lh * 1.9f - lift, cx - lw, my - lift)
             close()
         }, paint)
-        paint.color = Color.argb(70, 255, 255, 255)
+        // Kilau bibir sesuai finish lipstik.
+        val shine = if (lipstick <= 0f) 70 else when (p.lipFinish) {
+            LipFinish.Matte -> 20
+            LipFinish.Satin -> 70
+            LipFinish.Gloss -> 150
+        }
+        paint.color = Color.argb(shine, 255, 255, 255)
         c.drawOval(RectF(cx - lw * 0.3f, my + lh * 0.25f, cx + lw * 0.1f, my + lh * 0.65f), paint)
 
         // Kilau: kulit halus / cerah.

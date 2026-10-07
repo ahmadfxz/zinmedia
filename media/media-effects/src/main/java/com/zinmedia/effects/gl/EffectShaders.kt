@@ -55,6 +55,8 @@ public object EffectShaders {
         // lipstik, perona, kontur, masker aktif (1/0)
         uniform vec4 uMakeup;
         uniform vec3 uLipColor;
+        // finish lipstik: matte, gloss (keduanya 0 = satin)
+        uniform vec2 uLipFinish;
         uniform vec2 uTexel;
         varying vec2 vTexCoord;
 
@@ -150,9 +152,27 @@ public object EffectShaders {
                 c = mix(c, clamp((c - 0.5) * 1.18 + 0.56, 0.0, 1.0), eyes * uAreas.w * 0.7);
                 // Lipstik: rona & kepekatan dari warna lipstik; kecerahan ikut terang-gelap bibir
                 // asli (diredam, agar tekstur tetap ada tanpa membuat warna gelap jadi menyala).
-                float gain = pow(luma(c) / max(luma(uLipColor), 0.05), 0.6);
-                vec3 lip = clamp(uLipColor * gain, 0.0, 1.0);
-                c = mix(c, lip, lips * uMakeup.x * 0.85);
+                if (lips > 0.001) {
+                    // Kilau = lebih terang dari sekitarnya (bibir asli); positif di pantulan cahaya.
+                    vec2 r = uTexel * 6.0;
+                    float avg = (luma(texture2D(sTexture, vTexCoord + vec2(r.x, 0.0)).rgb)
+                        + luma(texture2D(sTexture, vTexCoord - vec2(r.x, 0.0)).rgb)
+                        + luma(texture2D(sTexture, vTexCoord + vec2(0.0, r.y)).rgb)
+                        + luma(texture2D(sTexture, vTexCoord - vec2(0.0, r.y)).rgb)) * 0.25;
+                    float shine = max(luma(original) - avg, 0.0);
+                    // Matte: kilau dibuang & kontras lebih rata; gloss: kontras lebih hidup.
+                    float y = max(luma(c) - shine * uLipFinish.x, 0.0);
+                    float contrast = 0.6 - 0.25 * uLipFinish.x + 0.2 * uLipFinish.y;
+                    float gain = pow(y / max(luma(uLipColor), 0.05), contrast);
+                    vec3 lip = clamp(uLipColor * gain, 0.0, 1.0);
+                    // Matte sedikit lebih pekat, seperti beludru.
+                    lip = clamp(mix(vec3(luma(lip)), lip, 1.0 + 0.15 * uLipFinish.x), 0.0, 1.0);
+                    float amount = lips * uMakeup.x;
+                    c = mix(c, lip, amount * 0.85);
+                    // Gloss: pantulan bibir asli diperkuat, ditambah kilau lembut di bagian terang.
+                    float spec = smoothstep(0.01, 0.09, shine) * 0.75 + smoothstep(0.45, 0.8, luma(original)) * 0.35;
+                    c += (1.0 - c) * clamp(spec, 0.0, 1.0) * amount * uLipFinish.y * 0.65;
+                }
                 // Perona: merah muda lembut di apel pipi.
                 c = mix(c, c * vec3(1.0, 0.86, 0.88) + vec3(0.07, 0.0, 0.02), cheeks * uMakeup.y * 0.7);
                 // Kontur & highlight.

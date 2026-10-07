@@ -33,7 +33,7 @@ dependencyResolutionManagement {
 
 ```toml
 [versions]
-zinmedia = "5.1.1"
+zinmedia = "5.2.0"
 
 [libraries]
 zinmedia-photoeditor = { module = "com.github.ahmadfxz.zinmedia:media-photoeditor", version.ref = "zinmedia" }
@@ -261,7 +261,7 @@ Urutan hasil sama dengan urutan media. Media yang tidak diedit dikembalikan deng
 - **Rekam bersegmen**: ketuk rana untuk mulai/berhenti, atau tahan selama merekam (geser jari ke atas saat menahan untuk zoom). Progress bar menandai tiap klip; klip terakhir bisa dihapus. Pilihan mode: 15d, 1m (default), 30d, atau Foto.
 - **Kecepatan** 0.3x, 0.5x, 1x, 2x, 3x per klip. Klip digabung (dan kecepatannya diterapkan) saat menekan Selesai.
 - **Filter real-time** (GPU) yang terlihat di preview dan ikut terekam: filter bawaan plus filter LUT `.cube` dari `MediaComposer.configure(videoFilters = …)`. Geser kiri/kanan di preview untuk ganti filter.
-- **Percantik ala TikTok**: tab Preset (12 bawaan, thumbnail otomatis), Kulit, Wajah, Mata, Hidung, Mulut, dan Riasan dengan 25 fitur dari katalog `BeautyFeature` (halus, cerah, lingkar mata, tirus, V-line, mata besar, hidung, dagu, senyum, gigi putih, lipstik dengan pilihan warna, perona, kontur, dll.). Semua mengikuti wajah (MediaPipe) dan ikut terekam.
+- **Percantik ala TikTok**: tab Preset (12 bawaan, thumbnail otomatis), Kulit, Wajah, Mata, Hidung, Mulut, dan Riasan dengan 25 fitur dari katalog `BeautyFeature` (halus, cerah, lingkar mata, tirus, V-line, mata besar, hidung, dagu, senyum, gigi putih, lipstik dengan pilihan warna & finish Matte/Satin/Glossy, perona, kontur, dll.). Semua mengikuti wajah (MediaPipe) dan ikut terekam.
 - **Kontrol kamera**: balik depan/belakang (juga ketuk 2× di preview), flash (senter di kamera belakang, layar putih di kamera depan), cubit untuk zoom, ketuk untuk fokus, timer 3/10 detik, grid.
 - **Foto beruntun**: di mode Foto, tiap jepretan ditampung dulu sampai batas `maxItems`. Foto tampil sebagai tumpukan kartu miring (menggantikan tombol galeri) dengan jumlahnya; ketuk tumpukan untuk membuka deretan foto (hapus dengan ×, jumlah mis. `2/5`). Tombol Selesai membuka semuanya di editor; saat batas tercapai editor terbuka otomatis. Dengan `maxItems = 1`, foto langsung dibuka di editor.
 - **Galeri**: pilih hingga `maxItems` foto/video sekaligus (default 5).
@@ -284,7 +284,7 @@ CameraConfig.beautyPresets = listOf(
         id = "natural",
         name = "Natural",
         iconUrl = "https://cdn.contoh.com/beauty/natural.webp",  // opsional; tanpa ini thumbnail digambar otomatis
-        params = BeautyParams.fromMap(mapOf("smooth" to 0.4, "brighten" to 0.12, "lipstick" to 0.3), lipColor = 0xFFE53935.toInt()),
+        params = BeautyParams.fromMap(mapOf("smooth" to 0.4, "brighten" to 0.12, "lipstick" to 0.3), lipColor = 0xFFE53935.toInt(), lipFinish = LipFinish.Gloss),
     ),
 ) + DefaultBeautyPresets
 ```
@@ -295,6 +295,7 @@ Beauty untuk aplikasi sendiri (kamera live, dsb.):
 // Satu angka per fitur; kunci = BeautyFeature.id, sehingga mudah disimpan / dikirim backend.
 val beauty = BeautyParams.of(BeautyFeature.Smooth to 0.5f, BeautyFeature.Lipstick to 0.4f)
     .withLipColor(0xFFE53935.toInt())
+    .withLipFinish(LipFinish.Matte)             // Matte, Satin (default), Gloss
 effects.setBeauty(beauty.with(BeautyFeature.EnlargeEyes, 0.2f))
 val json = beauty.toMap()                       // {"smooth":0.5,"lipstick":0.4}
 // UI: BeautyGroup.entries -> tab, BeautyFeature.entries.filter { it.group == tab } -> item,

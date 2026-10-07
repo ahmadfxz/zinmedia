@@ -33,6 +33,16 @@ class BeautyParamsTest {
     }
 
     @Test
+    fun lipFinish_keptAcrossEdits_andCompared() {
+        val gloss = BeautyParams.of(BeautyFeature.Lipstick to 0.4f).withLipFinish(LipFinish.Gloss)
+        assertEquals(LipFinish.Satin, BeautyParams.None.lipFinish)
+        assertEquals(LipFinish.Gloss, gloss.with(BeautyFeature.Smooth, 0.2f).withLipColor(0xFFE53935.toInt()).lipFinish)
+        assertFalse(gloss == gloss.withLipFinish(LipFinish.Matte))
+        assertEquals(gloss, BeautyParams.fromMap(gloss.toMap(), lipFinish = LipFinish.Gloss))
+        assertEquals(LipFinish.Matte, LipFinish.fromId("matte"))
+    }
+
+    @Test
     fun catalog_idsUnique_andPresetsValid() {
         assertEquals(BeautyFeature.entries.size, BeautyFeature.entries.map { it.id }.toSet().size)
         assertTrue(DefaultBeautyPresets.all { it.params.enabled })

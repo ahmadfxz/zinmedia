@@ -92,9 +92,27 @@ public enum class BeautyFeature(
     }
 }
 
+/** Hasil akhir (tekstur) lipstik untuk [BeautyFeature.Lipstick]. */
+public enum class LipFinish(public val id: String, public val label: String) {
+    /** Tanpa kilau, lembut seperti beludru. */
+    Matte("matte", "Matte"),
+
+    /** Sedikit kilau alami dari bibir asli (default). */
+    Satin("satin", "Satin"),
+
+    /** Basah & berkilau: pantulan cahaya di bibir diperkuat. */
+    Gloss("gloss", "Glossy"),
+    ;
+
+    public companion object {
+        /** Finish berdasarkan [id], atau `null` bila tidak dikenal. */
+        public fun fromId(id: String): LipFinish? = entries.firstOrNull { it.id == id }
+    }
+}
+
 /**
  * Nilai beauty: satu angka per [BeautyFeature] (default 0 = mati), selalu dalam [BeautyFeature.range],
- * ditambah warna lipstik. Tidak berubah; ubah dengan [with].
+ * ditambah warna & finish lipstik. Tidak berubah; ubah dengan [with].
  *
  * ```kotlin
  * val beauty = BeautyParams.of(BeautyFeature.Smooth to 0.5f, BeautyFeature.SlimFace to 0.3f)
@@ -108,6 +126,8 @@ public class BeautyParams private constructor(
     private val values: FloatArray,
     /** Warna lipstik (ARGB) untuk [BeautyFeature.Lipstick]. */
     public val lipColor: Int = DEFAULT_LIP_COLOR,
+    /** Finish lipstik untuk [BeautyFeature.Lipstick]. */
+    public val lipFinish: LipFinish = LipFinish.Satin,
 ) {
     /** Nilai [feature]. */
     public operator fun get(feature: BeautyFeature): Float = values[feature.ordinal]
@@ -116,11 +136,14 @@ public class BeautyParams private constructor(
     public fun with(feature: BeautyFeature, value: Float): BeautyParams {
         val copy = values.copyOf()
         copy[feature.ordinal] = value.coerceIn(feature.range)
-        return BeautyParams(copy, lipColor)
+        return BeautyParams(copy, lipColor, lipFinish)
     }
 
     /** Salinan dengan warna lipstik lain. */
-    public fun withLipColor(color: Int): BeautyParams = BeautyParams(values, color)
+    public fun withLipColor(color: Int): BeautyParams = BeautyParams(values, color, lipFinish)
+
+    /** Salinan dengan finish lipstik lain. */
+    public fun withLipFinish(finish: LipFinish): BeautyParams = BeautyParams(values, lipColor, finish)
 
     /** `true` bila setidaknya satu fitur aktif. */
     public val enabled: Boolean get() = values.any { it != 0f }
@@ -138,9 +161,10 @@ public class BeautyParams private constructor(
     public fun toMap(): Map<String, Float> = active.mapKeys { it.key.id }
 
     override fun equals(other: Any?): Boolean =
-        other is BeautyParams && values.contentEquals(other.values) && lipColor == other.lipColor
+        other is BeautyParams && values.contentEquals(other.values) && lipColor == other.lipColor &&
+            lipFinish == other.lipFinish
 
-    override fun hashCode(): Int = values.contentHashCode() * 31 + lipColor
+    override fun hashCode(): Int = (values.contentHashCode() * 31 + lipColor) * 31 + lipFinish.hashCode()
 
     override fun toString(): String = "BeautyParams(${toMap()})"
 
@@ -159,8 +183,12 @@ public class BeautyParams private constructor(
          * Dari peta [BeautyFeature.id] -> nilai (mis. preset dari backend). Kunci yang tidak ada = 0;
          * kunci tak dikenal diabaikan (aman untuk fitur versi baru); nilai dibatasi ke rentangnya.
          */
-        public fun fromMap(values: Map<String, Number>, lipColor: Int = DEFAULT_LIP_COLOR): BeautyParams =
-            values.entries.fold(None.withLipColor(lipColor)) { acc, (id, value) ->
+        public fun fromMap(
+            values: Map<String, Number>,
+            lipColor: Int = DEFAULT_LIP_COLOR,
+            lipFinish: LipFinish = LipFinish.Satin,
+        ): BeautyParams =
+            values.entries.fold(None.withLipColor(lipColor).withLipFinish(lipFinish)) { acc, (id, value) ->
                 BeautyFeature.fromId(id)?.let { acc.with(it, value.toFloat()) } ?: acc
             }
     }
@@ -176,68 +204,80 @@ public data class BeautyPreset(
 
 /** Preset bawaan untuk UI siap pakai; aplikasi dapat menggantinya (mis. `CameraConfig.beautyPresets`). */
 public val DefaultBeautyPresets: List<BeautyPreset> = run {
-    fun preset(id: String, name: String, lipColor: Int, vararg values: Pair<BeautyFeature, Float>) =
-        BeautyPreset(id, name, params = BeautyParams.of(*values).withLipColor(lipColor))
+    fun preset(id: String, name: String, lipColor: Int, vararg values: Pair<BeautyFeature, Float>, finish: LipFinish = LipFinish.Satin) =
+        BeautyPreset(id, name, params = BeautyParams.of(*values).withLipColor(lipColor).withLipFinish(finish))
+    // Prinsip: kulit halus tapi tidak seperti plastik, bentuk wajah tipis (tetap mirip diri sendiri),
+    // dan riasan dengan warna & finish yang serasi per gaya.
     listOf(
         preset(
-            "natural", "Natural", BeautyParams.DEFAULT_LIP_COLOR,
-            Smooth to 0.35f, Brighten to 0.12f, DarkCircles to 0.3f, SlimFace to 0.12f, EnlargeEyes to 0.08f,
+            "natural", "Natural", 0xFFC9787A.toInt(),
+            Smooth to 0.35f, Brighten to 0.1f, DarkCircles to 0.35f, SmileLines to 0.2f, SlimFace to 0.1f,
+            EnlargeEyes to 0.08f, BrightenEyes to 0.15f, Lipstick to 0.18f, Blush to 0.1f,
         ),
         preset(
-            "soft", "Lembut", BeautyParams.DEFAULT_LIP_COLOR,
-            Smooth to 0.6f, Brighten to 0.2f, Rosy to 0.12f, DarkCircles to 0.45f, SmileLines to 0.4f,
-            VShape to 0.2f, EnlargeEyes to 0.15f,
+            "soft", "Lembut", 0xFFE57373.toInt(),
+            Smooth to 0.55f, Brighten to 0.18f, Rosy to 0.12f, DarkCircles to 0.45f, SmileLines to 0.35f,
+            VShape to 0.15f, EnlargeEyes to 0.12f, BrightenEyes to 0.2f, Lipstick to 0.22f, Blush to 0.2f,
         ),
         preset(
-            "fresh", "Segar", 0xFFF06292.toInt(),
-            Smooth to 0.4f, Brighten to 0.22f, Rosy to 0.2f, DarkCircles to 0.4f, BrightenEyes to 0.3f,
-            Lipstick to 0.2f, Blush to 0.2f,
+            "fresh", "Segar", 0xFFF06262.toInt(),
+            Smooth to 0.4f, Brighten to 0.22f, Rosy to 0.18f, DarkCircles to 0.4f, BrightenEyes to 0.3f,
+            WhitenTeeth to 0.3f, Lipstick to 0.25f, Blush to 0.25f,
+            finish = LipFinish.Gloss,
         ),
         preset(
-            "glow", "Glowing", 0xFFBF6F5A.toInt(),
-            Smooth to 0.55f, Brighten to 0.35f, DarkCircles to 0.5f, Sharpen to 0.15f, Contour to 0.25f,
-            Lipstick to 0.15f, SlimFace to 0.12f,
+            "glow", "Glowing", 0xFFC97064.toInt(),
+            Smooth to 0.5f, Brighten to 0.3f, DarkCircles to 0.45f, Sharpen to 0.1f, Contour to 0.25f,
+            SlimFace to 0.12f, BrightenEyes to 0.25f, Lipstick to 0.25f, Blush to 0.12f,
+            finish = LipFinish.Gloss,
         ),
         preset(
-            "korean", "Korea", 0xFFE53935.toInt(),
-            Smooth to 0.65f, Brighten to 0.3f, Rosy to 0.1f, DarkCircles to 0.5f, VShape to 0.3f,
-            SmallFace to 0.15f, EnlargeEyes to 0.2f, Nose to 0.25f, Lipstick to 0.3f, Blush to 0.15f,
+            "korean", "Korea", 0xFFE5495E.toInt(),
+            Smooth to 0.6f, Brighten to 0.28f, Rosy to 0.1f, DarkCircles to 0.5f, SmileLines to 0.3f,
+            VShape to 0.25f, SmallFace to 0.1f, EnlargeEyes to 0.18f, Nose to 0.2f, BrightenEyes to 0.25f,
+            Lipstick to 0.35f, Blush to 0.2f,
+            finish = LipFinish.Gloss,
         ),
         preset(
             "glam", "Glam", BeautyParams.DEFAULT_LIP_COLOR,
-            Smooth to 0.5f, Brighten to 0.18f, SlimFace to 0.3f, VShape to 0.25f, EnlargeEyes to 0.25f,
-            Nose to 0.3f, BrightenEyes to 0.4f, Lipstick to 0.45f, Blush to 0.35f, Contour to 0.35f,
-            WhitenTeeth to 0.5f,
+            Smooth to 0.5f, Brighten to 0.15f, SlimFace to 0.22f, VShape to 0.2f, Cheekbones to 0.1f,
+            EnlargeEyes to 0.2f, Nose to 0.25f, BrightenEyes to 0.35f, WhitenTeeth to 0.4f,
+            Lipstick to 0.5f, Blush to 0.25f, Contour to 0.35f,
+            finish = LipFinish.Matte,
         ),
         preset(
             "doll", "Boneka", 0xFFF06292.toInt(),
-            Smooth to 0.7f, SmallFace to 0.35f, VShape to 0.35f, EnlargeEyes to 0.45f, Nose to 0.4f,
-            MouthSize to -0.2f, Chin to 0.15f, Blush to 0.4f, Lipstick to 0.2f,
+            Smooth to 0.6f, Brighten to 0.2f, Rosy to 0.15f, SmallFace to 0.2f, VShape to 0.25f,
+            EnlargeEyes to 0.3f, Nose to 0.25f, Chin to 0.1f, MouthSize to -0.1f, Lipstick to 0.3f, Blush to 0.35f,
+            finish = LipFinish.Gloss,
         ),
         preset(
-            "sculpt", "Tirus", BeautyParams.DEFAULT_LIP_COLOR,
-            Smooth to 0.3f, SlimFace to 0.4f, VShape to 0.35f, Cheekbones to 0.3f, Jaw to 0.3f,
-            Chin to 0.1f, Nose to 0.3f, Contour to 0.45f,
+            "sculpt", "Tirus", 0xFFB5776A.toInt(),
+            Smooth to 0.3f, SlimFace to 0.3f, VShape to 0.25f, Cheekbones to 0.25f, Jaw to 0.25f,
+            Chin to 0.08f, Nose to 0.25f, Contour to 0.45f, Lipstick to 0.2f,
+            finish = LipFinish.Matte,
         ),
         preset(
             "party", "Pesta", 0xFFC62828.toInt(),
-            Smooth to 0.5f, Brighten to 0.15f, SlimFace to 0.2f, EnlargeEyes to 0.2f, BrightenEyes to 0.45f,
-            WhitenTeeth to 0.6f, Lipstick to 0.7f, Blush to 0.25f, Contour to 0.4f, Sharpen to 0.2f,
+            Smooth to 0.5f, Brighten to 0.15f, SlimFace to 0.2f, EnlargeEyes to 0.18f, BrightenEyes to 0.4f,
+            WhitenTeeth to 0.5f, Sharpen to 0.15f, Lipstick to 0.55f, Blush to 0.25f, Contour to 0.35f,
+            finish = LipFinish.Gloss,
         ),
         preset(
-            "sweet", "Manis", 0xFFD81B60.toInt(),
-            Smooth to 0.5f, Brighten to 0.15f, Rosy to 0.25f, EnlargeEyes to 0.2f, Smile to 0.35f,
-            Lipstick to 0.35f, Blush to 0.45f,
+            "sweet", "Manis", 0xFFE0607E.toInt(),
+            Smooth to 0.5f, Brighten to 0.18f, Rosy to 0.2f, DarkCircles to 0.35f, EnlargeEyes to 0.18f,
+            Smile to 0.25f, Lipstick to 0.3f, Blush to 0.4f,
         ),
         preset(
             "nude", "Nude", 0xFFB5776A.toInt(),
-            Smooth to 0.45f, Brighten to 0.1f, DarkCircles to 0.35f, SlimFace to 0.15f, Lipstick to 0.4f,
-            Contour to 0.2f,
+            Smooth to 0.45f, Brighten to 0.1f, DarkCircles to 0.4f, SlimFace to 0.15f, BrightenEyes to 0.2f,
+            Lipstick to 0.45f, Contour to 0.25f,
+            finish = LipFinish.Matte,
         ),
         preset(
             "men", "Pria", BeautyParams.DEFAULT_LIP_COLOR,
-            Smooth to 0.25f, DarkCircles to 0.35f, SmileLines to 0.25f, Sharpen to 0.25f,
-            Cheekbones to 0.15f, BrightenEyes to 0.2f, WhitenTeeth to 0.35f,
+            Smooth to 0.25f, DarkCircles to 0.35f, SmileLines to 0.25f, Sharpen to 0.2f,
+            Cheekbones to 0.1f, Jaw to 0.1f, BrightenEyes to 0.2f, WhitenTeeth to 0.3f,
         ),
     )
 }
