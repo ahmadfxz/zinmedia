@@ -20,6 +20,9 @@ internal class FrameResult(val frame: Long, val meshes: List<FloatArray>, val fl
  *   keterlambatan pada gerakan.
  * - Jeda dijaga stabil agar video tetap mulus; batas di atas tetap dijamin walau harus mengulang
  *   satu frame.
+ * - Wajah yang sesaat tidak terdeteksi (cahaya kurang, gerakan, HP lambat) tidak membuat efek
+ *   berkedip: hasil "tanpa wajah" diabaikan selama [LOSS_GRACE] frame setelah wajah terakhir, jadi
+ *   posisi terakhir yang dipakai. Wajah yang benar-benar pergi tetap hilang sesudahnya.
  *
  * [onFrame], [outputFrame], [resultFor], dan [reset] dipanggil di thread GL; [add] dari thread
  * hasil deteksi.
@@ -35,6 +38,7 @@ internal class FrameSync(private val maxDelay: Int) {
     private var latencyAvg = 1f
     private var gapAvg = 1f
     private var newestResult = -1L
+    private var lastFaceFrame = -1L
 
     /** Jumlah frame yang ditahan saat ini (target; frame bisa ditahan lebih lama bila perlu). */
     var delay = 1
@@ -84,6 +88,12 @@ internal class FrameSync(private val maxDelay: Int) {
             gapAvg += ((result.frame - newestResult) - gapAvg) * SMOOTHING
         }
         newestResult = maxOf(newestResult, result.frame)
+        if (result.meshes.isNotEmpty()) {
+            lastFaceFrame = maxOf(lastFaceFrame, result.frame)
+        } else if (lastFaceFrame >= 0 && result.frame - lastFaceFrame <= LOSS_GRACE) {
+            // Sesaat tanpa wajah: abaikan, wajah terakhir yang dipakai (lihat interpolatedAt).
+            return@synchronized
+        }
         while (results.isNotEmpty() && results.last().frame >= result.frame) results.removeLast()
         results.addLast(result)
         while (results.size > KEEP) results.removeFirst()
@@ -107,6 +117,7 @@ internal class FrameSync(private val maxDelay: Int) {
         synchronized(lock) {
             results.clear()
             newestResult = -1L
+            lastFaceFrame = -1L
         }
         startFrame = -1L
         lastOut = -1L
@@ -119,6 +130,9 @@ internal class FrameSync(private val maxDelay: Int) {
         const val CHANGE_EVERY = 15
         const val MAX_WINDOW = 4
         const val KEEP = 24
+
+        /** Frame tanpa wajah yang diabaikan setelah wajah terakhir (±330 ms pada 30 fps). */
+        const val LOSS_GRACE = 10
     }
 }
 

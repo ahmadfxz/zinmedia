@@ -84,6 +84,15 @@ public class ZinEffects(
     /** Warna contoh tiap filter (ARGB, urutan sama dengan [filterNames]), untuk daftar pilihan filter. */
     public val filterSwatches: List<Int> = filters.map { it.swatch.toInt() }
 
+    private val _faceTrackingSlow = MutableStateFlow(false)
+
+    /**
+     * `true` bila pelacakan wajah di HP ini terlalu lambat untuk efek wajah & beauty yang lancar
+     * (deteksi rata-rata < ±8 kali/detik). Aplikasi bisa memberi tahu pengguna atau menawarkan
+     * untuk mematikan efek wajah. Hanya diukur selama efek wajah/beauty dipakai.
+     */
+    public val faceTrackingSlow: StateFlow<Boolean> = _faceTrackingSlow.asStateFlow()
+
     private val _faceModelProgress = MutableStateFlow<Float?>(null)
 
     /** Progres unduh model wajah (0..1), `null` bila tidak sedang mengunduh. */
@@ -201,7 +210,7 @@ public class ZinEffects(
             _faceModelProgress.value = 0f
             val model = ensureFaceModel(context, faceModelUrl) { _faceModelProgress.value = it }
             withContext(Dispatchers.Default) {
-                FaceDetector(context, model, maxFaces, render.engine::onFaces)
+                FaceDetector(context, model, maxFaces, render.engine::onFaces) { _faceTrackingSlow.value = it }
             }.also { detector = it }
         } finally {
             _faceModelProgress.value = null
